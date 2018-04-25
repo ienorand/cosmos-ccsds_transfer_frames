@@ -36,10 +36,13 @@ module Cosmos
     SPACE_PACKET_HEADER_LENGTH = 6
     SPACE_PACKET_LENGTH_BIT_OFFSET = 4 * 8
     SPACE_PACKET_LENGTH_BITS = 2 * 8
+    SPACE_PACKET_APID_BITS = 14
+    SPACE_PACKET_APID_BIT_OFFSET = 2 * 8 - SPACE_PACKET_APID_BITS
+    IDLE_PACKET_APID = 0b11111111111111
 
     # @param transfer_frame_length [Integer] Length of transfer frame in bytes
-    # @param transfer_secondary_header_length [Integer] Length of transfer
-    #        frame secondary header in bytes
+    # @param transfer_frame_secondary_header_length [Integer] Length of
+    #        transfer frame secondary header in bytes
     # @param transfer_frame_has_operational_control_field [Boolean] Flag
     #        indicating if the transfer frame operational control field is
     #        present or not
@@ -58,7 +61,7 @@ module Cosmos
       transfer_frame_has_operational_control_field,
       transfer_frame_has_frame_error_control_field,
       prefix_packets = false,
-      #include_idle_packets = false,
+      include_idle_packets = false,
       allow_empty_data = nil)
       super(allow_empty_data)
 
@@ -78,7 +81,7 @@ module Cosmos
       @prefix_packets = ConfigParser.handle_true_false(prefix_packets)
       @packet_prefix_length += @frame_headers_length if @prefix_packets
 
-      #@include_idle_packets = ConfigParser.handle_true_false(include_idle_packets)
+      @include_idle_packets = ConfigParser.handle_true_false(include_idle_packets)
     end
 
     def reset
@@ -110,14 +113,15 @@ module Cosmos
     private
 
     def get_packet
-      if (@packet_queue.length > 1 || @pending_incomplete_packet_bytes_left == 0)
-        packet_data = @packet_queue.shift
-        return packet_data unless packet_data.nil?
-        # If the packet queue contains any more whole packets they will be
-        # handled in subsequent calls to this method. Cosmos will ensure that
-        # read_data() is called until it returns :STOP, which allows us to
-        # clear all whole packets.
-      end
+      # Signal more date needed if there's a single incomplete packet in queue.
+      return :STOP if (@packet_queue.length == 1 && @pending_incomplete_packet_bytes_left > 0)
+
+      packet_data = @packet_queue.shift
+      return packet_data unless packet_data.nil?
+      # If the packet queue contains any more whole packets they will be
+      # handled in subsequent calls to this method. Cosmos will ensure that
+      # read_data() is called until it returns :STOP, which allows us to
+      # clear all whole packets.
 
       # no whole packet was completed with the given data
       return :STOP
@@ -138,6 +142,24 @@ module Cosmos
         rest_of_packet_header_length = @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH - @packet_queue[-1].length
         @packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
 
+        if (!@include_idle_packets)
+          space_packet_header = @packet_queue[-1][@packet_prefix_length, SPACE_PACKET_HEADER_LENGTH]
+          if (get_space_packet_apid(space_packet_header) == IDLE_PACKET_APID)
+            # discard this packet
+            @packet_queue.shift
+
+            # Idle packets will always fill to the end of the current frame, so
+            # no more processing of this frame is needed.
+            #
+            # If the idle packet spans over two frames (a minimum length space
+            # packet would not fit in the remaining space of the current
+            # frame), the second frame will be discarded since it is a
+            # continuation frame and there is no pending incomplete packet.
+            @pending_incomplete_packet_bytes_left = 0
+            return
+          end
+        end
+
         space_packet_length = get_space_packet_length(@packet_queue[-1][@packet_prefix_length..-1])
         throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
 
@@ -152,8 +174,9 @@ module Cosmos
       end
 
       if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
-        # This was not a continuation of a packet, wait for another frame to
-        # find a packet start.
+        # This was not a continuation of a packet (or it was a continuation of
+        # an ignored idle packet), wait for another frame to find a packet
+        # start.
         return
       end
 
@@ -184,6 +207,18 @@ module Cosmos
           return
         end
 
+        if (!@include_idle_packets &&
+            get_space_packet_apid(frame_data_field) == IDLE_PACKET_APID)
+          # Idle packets will always fill to the end of the current frame, so
+          # no more processing of this frame is needed.
+          #
+          # If the idle packet spans over two frames (a minimum length space
+          # packet would not fit in the remaining space of the current
+          # frame), the second frame will be discarded since it is a
+          # continuation frame and there is no pending incomplete packet.
+          return
+        end
+
         space_packet_length = get_space_packet_length(frame_data_field)
         throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
         if (space_packet_length > frame_data_field.length)
@@ -192,7 +227,10 @@ module Cosmos
           return
         end
 
-        @packet_queue[-1] << frame_data_field.slice!(0, space_packet_length)
+        space_packet = frame_data_field.slice!(0, space_packet_length)
+        next if get_space_packet_apid(space_packet) == IDLE_PACKET_APID
+
+        @packet_queue[-1] << space_packet
       end
     end
 
@@ -210,6 +248,21 @@ module Cosmos
         :BIG_ENDIAN) + 1
       space_packet_length = SPACE_PACKET_HEADER_LENGTH + space_packet_data_field_length
       return space_packet_length
+    end
+
+    def get_space_packet_apid(space_packet)
+      # signal more data needed if we do not have enough of the header to
+      # determine the apid of the space packet
+      return :STOP if (space_packet.length < (SPACE_PACKET_APID_BIT_OFFSET + SPACE_PACKET_APID_BITS) / 8)
+
+      # actual length in ccsds space packet is stored value plus one
+      space_packet_apid = BinaryAccessor.read(
+        SPACE_PACKET_APID_BIT_OFFSET,
+        SPACE_PACKET_APID_BITS,
+        :UINT,
+        space_packet,
+        :BIG_ENDIAN)
+      return space_packet_apid
     end
   end
 end
