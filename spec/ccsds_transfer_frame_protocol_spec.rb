@@ -203,6 +203,76 @@ module Cosmos
         expect(packet.buffer).to eql "\x14\x15\x16\x17\x00\x00\xDA"
       end
 
+      it "Discards idle packets" do
+        @interface.instance_variable_set(:@stream, TestStream.new)
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+          # Transfer frame length, 17 bytes data field.
+          6 + 17,
+          0, # secondary header length
+          false, # does not have operational control field
+          false], # does not have frame error control
+          :READ)
+
+        $buffer = "\x01\x02\x03\x04\x00\x00"
+	$buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        $buffer += "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+        # Should return the first packet
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 8
+        expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+	# Should not return the idle packet
+	expect(@interface.read_protocols[0].read_data("")).to eql :STOP 
+      end
+
+      it "Discards idle packets in between normal packets" do
+        @interface.instance_variable_set(:@stream, TestStream.new)
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+          # Transfer frame length, 27 bytes data field.
+          6 + 27,
+          0, # secondary header length
+          false, # does not have operational control field
+          false], # does not have frame error control
+          :READ)
+
+        $buffer = "\x01\x02\x03\x04\x00\x00"
+	$buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        $buffer += "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+        $buffer += "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
+        # Should return the first packet
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 8
+        expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        # Should return the last packet
+	$buffer = ""
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 10
+        expect(packet.buffer).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
+      end
+
+      it "Discards idle packets which spans multiple frames" do
+        @interface.instance_variable_set(:@stream, TestStream.new)
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+          # Transfer frame length, 8 bytes data field.
+          6 + 8,
+          0, # secondary header length
+          false, # does not have operational control field
+          false], # does not have frame error control
+          :READ)
+
+        $buffer = "\x01\x02\x03\x04\x00\x00"
+	$buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        $buffer += "\x3F"
+        # Should return the first packet
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 8
+        expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        # Should not return the idle packet
+	$buffer = "\x01\x02\x03\x04\x01\xFF"
+	$buffer += "\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+        packet = @interface.read
+        expect(packet.buffer).to eql nil
+      end
+
       it "Asks for more data if not enough for a frame is received" do
         class PiecewiseTestStream < Stream
           def initialize
