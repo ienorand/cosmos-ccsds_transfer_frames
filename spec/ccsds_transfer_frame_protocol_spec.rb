@@ -214,14 +214,13 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x00\x00"
-	$buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
-        $buffer += "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
-        # Should return the first packet
+        $buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        $buffer += "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"        # Should return the first packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 8
         expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
-	# Should not return the idle packet
-	expect(@interface.read_protocols[0].read_data("")).to eql :STOP 
+        # Should not return the idle packet
+        expect(@interface.read_protocols[0].read_data("")).to eql :STOP 
       end
 
       it "Discards idle packets in between normal packets" do
@@ -235,7 +234,7 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x00\x00"
-	$buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        $buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
         $buffer += "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
         $buffer += "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
         # Should return the first packet
@@ -243,10 +242,9 @@ module Cosmos
         expect(packet.buffer.length).to eql 8
         expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
         # Should return the last packet
-	$buffer = ""
-        packet = @interface.read
-        expect(packet.buffer.length).to eql 10
-        expect(packet.buffer).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
+        packet_data = @interface.read_protocols[0].read_data("")
+        expect(packet_data.length).to eql 10
+        expect(packet_data).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
       end
 
       it "Discards idle packets which spans multiple frames" do
@@ -260,17 +258,17 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x00\x00"
-	$buffer += "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        $buffer += "\x05\x06\x07\x08\x00\x00\xDA"
         $buffer += "\x3F"
         # Should return the first packet
         packet = @interface.read
-        expect(packet.buffer.length).to eql 8
-        expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+        expect(packet.buffer.length).to eql 7
+        expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x00\xDA"
         # Should not return the idle packet
-	$buffer = "\x01\x02\x03\x04\x01\xFF"
-	$buffer += "\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
-        packet = @interface.read
-        expect(packet.buffer).to eql nil
+        buffer = "\x01\x02\x03\x04\x07\xFF"
+        buffer += "\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+        packet_data = @interface.read_protocols[0].read_data(buffer)
+        expect(packet_data).to eql :STOP
       end
 
       it "Asks for more data if not enough for a frame is received" do

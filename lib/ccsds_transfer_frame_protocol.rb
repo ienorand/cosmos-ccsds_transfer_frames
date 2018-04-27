@@ -113,7 +113,7 @@ module Cosmos
     private
 
     def get_packet
-      # Signal more date needed if there's a single incomplete packet in queue.
+      # Signal more data needed if there's a single incomplete packet in the queue.
       return :STOP if (@packet_queue.length == 1 && @pending_incomplete_packet_bytes_left > 0)
 
       packet_data = @packet_queue.shift
@@ -142,28 +142,32 @@ module Cosmos
         rest_of_packet_header_length = @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH - @packet_queue[-1].length
         @packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
 
-        if (!@include_idle_packets)
-          space_packet_header = @packet_queue[-1][@packet_prefix_length, SPACE_PACKET_HEADER_LENGTH]
-          if (get_space_packet_apid(space_packet_header) == IDLE_PACKET_APID)
-            # discard this packet
-            @packet_queue.shift
-
-            # Idle packets will always fill to the end of the current frame, so
-            # no more processing of this frame is needed.
-            #
-            # If the idle packet spans over two frames (a minimum length space
-            # packet would not fit in the remaining space of the current
-            # frame), the second frame will be discarded since it is a
-            # continuation frame and there is no pending incomplete packet.
-            @pending_incomplete_packet_bytes_left = 0
-            return
-          end
-        end
-
         space_packet_length = get_space_packet_length(@packet_queue[-1][@packet_prefix_length..-1])
         throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
 
-        @pending_incomplete_packet_bytes_left = space_packet_length - SPACE_PACKET_HEADER_LENGTH
+        if (!@include_idle_packets &&
+            get_space_packet_apid(@packet_queue[-1][@packet_prefix_length, SPACE_PACKET_HEADER_LENGTH]) == IDLE_PACKET_APID)
+          # discard this packet
+          @packet_queue.pop
+          if (@pending_incomplete_packet_bytes_left >= frame_data_field.length)
+            # The idle packet exactly fills this frame or continues in the next
+            # frame, the current frame can be skipped.
+
+            # If the idle packet spans over two frames, the continuation of the
+            # packet in the next frame will be discarded since there is no
+            # pending incomplete packet.
+            @pending_incomplete_packet_bytes_left = 0
+            return
+          else
+            # The idle packet ends before the end of this frame, discard it
+            # and handle the rest of the frame.
+            frame_data_field.replace(frame_data_field[@pending_incomplete_packet_bytes_left..-1])
+            @pending_incomplete_packet_bytes_left = 0
+          end
+        else
+          # keep idle packet
+          @pending_incomplete_packet_bytes_left = space_packet_length - SPACE_PACKET_HEADER_LENGTH
+        end
       end
 
       if (@pending_incomplete_packet_bytes_left >= frame_data_field.length)
@@ -207,30 +211,33 @@ module Cosmos
           return
         end
 
-        if (!@include_idle_packets &&
-            get_space_packet_apid(frame_data_field) == IDLE_PACKET_APID)
-          # Idle packets will always fill to the end of the current frame, so
-          # no more processing of this frame is needed.
-          #
-          # If the idle packet spans over two frames (a minimum length space
-          # packet would not fit in the remaining space of the current
-          # frame), the second frame will be discarded since it is a
-          # continuation frame and there is no pending incomplete packet.
-          return
-        end
-
         space_packet_length = get_space_packet_length(frame_data_field)
         throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
+
         if (space_packet_length > frame_data_field.length)
+          if (!@include_idle_packets && 
+              get_space_packet_apid(frame_data_field) == IDLE_PACKET_APID)
+            # discard this packet
+            @packet_queue.pop
+            # Idle packet spans over two frames, the continuation of the packet
+            # in the next frame will be discarded since there is no pending
+            # incomplete packet.
+            return
+          end
+
           @packet_queue[-1] << frame_data_field
           @pending_incomplete_packet_bytes_left = space_packet_length - frame_data_field.length
           return
         end
 
         space_packet = frame_data_field.slice!(0, space_packet_length)
-        next if get_space_packet_apid(space_packet) == IDLE_PACKET_APID
-
-        @packet_queue[-1] << space_packet
+        if (!@include_idle_packets && 
+            get_space_packet_apid(space_packet) == IDLE_PACKET_APID)
+          # discard this packet
+          @packet_queue.pop
+        else
+          @packet_queue[-1] << space_packet
+        end
       end
     end
 
