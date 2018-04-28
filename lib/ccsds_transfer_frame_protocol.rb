@@ -136,6 +136,20 @@ module Cosmos
 
       frame_data_field = frame[@frame_headers_length, @frame_data_field_length]
 
+      status = handle_packet_continuation(frame_data_field, first_header_pointer)
+      return if (Symbol === status && status == :STOP)
+
+      if (frame_data_field.length == @frame_data_field_length)
+        # No continuation packet was completed, and a packet starts in this
+        # frame. Utilise the first header pointer to re-sync to a packet start.
+        frame_data_field.replace(frame_data_field[first_header_pointer..-1])
+      end
+
+      frame_headers = frame[0, @frame_headers_length].clone
+      store_packets(frame_headers, frame_data_field)
+    end
+
+    def handle_packet_continuation(frame_data_field, first_header_pointer)
       if (@packet_queue.length > 0 &&
           @packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
         # pending incomplete packet does not have header yet
@@ -157,7 +171,7 @@ module Cosmos
             # packet in the next frame will be discarded since there is no
             # pending incomplete packet.
             @pending_incomplete_packet_bytes_left = 0
-            return
+            return :STOP
           else
             # The idle packet ends before the end of this frame, discard it
             # and handle the rest of the frame.
@@ -174,14 +188,14 @@ module Cosmos
         # continuation of a packet
         @packet_queue[-1] << frame_data_field
         @pending_incomplete_packet_bytes_left -= frame_data_field.length
-        return
+        return :STOP
       end
 
       if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
         # This was not a continuation of a packet (or it was a continuation of
         # an ignored idle packet), wait for another frame to find a packet
         # start.
-        return
+        return :STOP
       end
 
       if (@pending_incomplete_packet_bytes_left > 0)
@@ -189,17 +203,11 @@ module Cosmos
         @packet_queue[-1] << rest_of_packet
         @pending_incomplete_packet_bytes_left = 0
       end
+    end
 
-      if (frame_data_field.length == @frame_data_field_length)
-        # No continuation packet was completed, and a packet starts in this
-        # frame. Utilise the first header pointer to re-sync to a packet start.
-        frame_data_field.replace(frame_data_field[first_header_pointer..-1])
-      end
-
-      frame_headers = frame[0, @frame_headers_length].clone
-
+    def store_packets(frame_headers, frame_data_field)
       while (frame_data_field.length > 0) do
-        if @prefix_packets
+        if (@prefix_packets)
           @packet_queue << frame_headers.clone
         else
           @packet_queue << ""
@@ -217,11 +225,11 @@ module Cosmos
         if (space_packet_length > frame_data_field.length)
           if (!@include_idle_packets && 
               get_space_packet_apid(frame_data_field) == IDLE_PACKET_APID)
-            # discard this packet
+            # discard idle packet
             @packet_queue.pop
-            # Idle packet spans over two frames, the continuation of the packet
-            # in the next frame will be discarded since there is no pending
-            # incomplete packet.
+            # Skip storing unfinished idle packet. The continuation of the
+            # packet in the next frame will then be discarded since there is no
+            # pending incomplete packet.
             return
           end
 
@@ -233,7 +241,7 @@ module Cosmos
         space_packet = frame_data_field.slice!(0, space_packet_length)
         if (!@include_idle_packets && 
             get_space_packet_apid(space_packet) == IDLE_PACKET_APID)
-          # discard this packet
+          # discard idle packet
           @packet_queue.pop
         else
           @packet_queue[-1] << space_packet
