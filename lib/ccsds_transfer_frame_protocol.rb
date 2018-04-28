@@ -112,11 +112,21 @@ module Cosmos
 
     private
 
+    # Get a packet from the queue of stored packets from processed frames.
+    #
+    # If idle packets are not included, extracted idle packets are discarded
+    # and extraction is retried until a non-idle packet is found or no more
+    # complete packets are left in the queue.
+    #
+    # @return [String] Packet data, if the queue contained at least one
+    #   complete packet.
+    # @return [Symbol] :STOP, if the queue does not contain any complete
+    #   packets.
     def get_packet
-      # Signal more data needed if there's a single incomplete packet in the queue.
-      return :STOP if (@packet_queue.length == 1 && @pending_incomplete_packet_bytes_left > 0)
-
       loop do
+        # Signal more data needed if there's a single incomplete packet in the queue.
+        return :STOP if (@packet_queue.length == 1 && @pending_incomplete_packet_bytes_left > 0)
+
         packet_data = @packet_queue.shift
 
         return :STOP if packet_data.nil?
@@ -133,6 +143,12 @@ module Cosmos
       # clear all whole packets.
     end
 
+    # Extract packets from a transfer frame and store them in the packet queue.
+    #
+    # First handles packet continuation of any incomplete packet and then
+    # handles the rest of the packets in the frame.
+    #
+    # @param frame [String] Transfer frame data.
     def process_frame(frame)
       first_header_pointer =
         ((frame.bytes[FIRST_HEADER_POINTER_OFFSET] & FIRST_HEADER_POINTER_MASK[0]) << 8) |
@@ -155,6 +171,13 @@ module Cosmos
       store_packets(frame_headers, frame_data_field)
     end
 
+    # Handle packet continuation when processing a transfer frame.
+    #
+    # Ensures that any incomplete packet first has enough data for the packet
+    # header to determine its length and then ensures that it has enough data
+    # to be complete based on its length.
+    #
+    # @param frame [String] Transfer frame data.
     def handle_packet_continuation(frame_data_field, first_header_pointer)
       if (@packet_queue.length > 0 &&
           @packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)

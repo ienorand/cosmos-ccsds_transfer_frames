@@ -271,6 +271,31 @@ module Cosmos
         expect(packet_data).to eql :STOP
       end
 
+      it "Handles and idle packet followed by a packet that spans two frames" do
+        @interface.instance_variable_set(:@stream, TestStream.new)
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+          # Transfer frame length, 8 bytes data field.
+          6 + 8,
+          0, # secondary header length
+          false, # does not have operational control field
+          false], # does not have frame error control
+          :READ)
+
+        buffer = "\x01\x02\x03\x04\x00\x00"
+        buffer += "\x3F\xFF\x05\x06\x00\x00\x5A"
+        buffer += "\x07"
+        # Should not return the idle packet
+        packet_data = @interface.read_protocols[0].read_data(buffer)
+        expect(packet_data).to eql :STOP
+        $buffer = "\x01\x02\x03\x04\x07\xFF"
+        $buffer += "\x08\x09\x0A\x00\x02\xDA\xDA\xDA"
+        # Should return the finished packet
+        packet = @interface.read
+#        packet_data = @interface.read_protocols[0].read_data(buffer)
+        expect(packet.buffer.length).to eql 9
+        expect(packet.buffer).to eql "\x07\x08\x09\x0A\x00\x02\xDA\xDA\xDA"
+      end
+
       it "Asks for more data if not enough for a frame is received" do
         class PiecewiseTestStream < Stream
           def initialize
