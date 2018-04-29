@@ -24,6 +24,8 @@ require 'thread'
 module Cosmos
   # Given a stream of ccsds transfer frames, extract ccsds space packets based
   # on the first header pointer and packet lengths.
+  #
+  # Only read is supported.
   class CcsdsTransferFrameProtocol < Protocol
     FRAME_PRIMARY_HEADER_LENGTH = 6
     FIRST_HEADER_POINTER_OFFSET = 4
@@ -31,6 +33,9 @@ module Cosmos
     FIRST_HEADER_POINTER_MASK = [0b00000111, 0b11111111]
     IDLE_FRAME_FIRST_HEADER_POINTER = 0b11111111110
     NO_PACKET_START_FIRST_HEADER_POINTER = 0b11111111111
+    FRAME_VIRTUAL_CHANNEL_BIT_OFFSET = 12
+    FRAME_VIRTUAL_CHANNEL_BITS = 3
+    VIRTUAL_CHANNEL_COUNT = 8
     FRAME_OPERATIONAL_CONTROL_FIELD_LENGTH = 4
     FRAME_ERROR_CONTROL_FIELD_LENGTH = 2
     SPACE_PACKET_HEADER_LENGTH = 6
@@ -87,8 +92,7 @@ module Cosmos
     def reset
       super()
       @data = ''
-      @packet_queue = []
-      @pending_incomplete_packet_bytes_left = 0
+      @virtual_channels = Array.new(VIRTUAL_CHANNEL_COUNT) { VirtualChannel.new }
     end
 
     def read_data(data)
@@ -112,35 +116,47 @@ module Cosmos
 
     private
 
-    # Get a packet from the queue of stored packets from processed frames.
+    VirtualChannel = Struct.new(:packet_queue, :pending_incomplete_packet_bytes_left) do
+      def initialize(packet_queue: [], pending_incomplete_packet_bytes_left: 0)
+        super(packet_queue, pending_incomplete_packet_bytes_left)
+      end
+    end
+
+    # Get a packet from the virtual channel packet queues of stored packets
+    # from processed frames.
     #
     # If idle packets are not included, extracted idle packets are discarded
     # and extraction is retried until a non-idle packet is found or no more
-    # complete packets are left in the queue.
+    # complete packets are left in any of the virtual channel packet queues.
     #
-    # @return [String] Packet data, if the queue contained at least one
+    # @return [String] Packet data, if the queues contained at least one
     #   complete packet.
-    # @return [Symbol] :STOP, if the queue does not contain any complete
+    # @return [Symbol] :STOP, if the queues does not contain any complete
     #   packets.
     def get_packet
-      loop do
-        # Signal more data needed if there's a single incomplete packet in the queue.
-        return :STOP if (@packet_queue.length == 1 && @pending_incomplete_packet_bytes_left > 0)
+      @virtual_channels.each do |vc|
+        loop do
+          # Skip if there's only a single incomplete packet in the queue.
+          break if (vc.packet_queue.length == 1 &&
+                    vc.pending_incomplete_packet_bytes_left > 0)
 
-        packet_data = @packet_queue.shift
+          packet_data = vc.packet_queue.shift
 
-        return :STOP if packet_data.nil?
+          break if packet_data.nil?
 
-        return packet_data if @include_idle_packets
+          return packet_data if @include_idle_packets
 
-        apid = get_space_packet_apid(packet_data[@packet_prefix_length, SPACE_PACKET_HEADER_LENGTH])
-        return packet_data unless (apid == IDLE_PACKET_APID)
+          apid = get_space_packet_apid(packet_data[@packet_prefix_length, SPACE_PACKET_HEADER_LENGTH])
+          return packet_data unless (apid == IDLE_PACKET_APID)
+        end
       end
-      
-      # If the packet queue contains any more whole packets they will be
+      # If the packet queues contains any more whole packets they will be
       # handled in subsequent calls to this method. Cosmos will ensure that
       # read_data() is called until it returns :STOP, which allows us to
       # clear all whole packets.
+
+      # no complete packet for any virtual channel
+      return :STOP
     end
 
     # Extract packets from a transfer frame and store them in the packet queue.
@@ -156,9 +172,16 @@ module Cosmos
 
       return if (first_header_pointer == IDLE_FRAME_FIRST_HEADER_POINTER)
 
+      virtual_channel = BinaryAccessor.read(
+        FRAME_VIRTUAL_CHANNEL_BIT_OFFSET,
+        FRAME_VIRTUAL_CHANNEL_BITS,
+        :UINT,
+        frame,
+        :BIG_ENDIAN)
+
       frame_data_field = frame[@frame_headers_length, @frame_data_field_length]
 
-      status = handle_packet_continuation(frame_data_field, first_header_pointer)
+      status = handle_packet_continuation(virtual_channel, frame_data_field, first_header_pointer)
       return if (Symbol === status && status == :STOP)
 
       if (frame_data_field.length == @frame_data_field_length)
@@ -168,7 +191,7 @@ module Cosmos
       end
 
       frame_headers = frame[0, @frame_headers_length].clone
-      store_packets(frame_headers, frame_data_field)
+      store_packets(virtual_channel, frame_headers, frame_data_field)
     end
 
     # Handle packet continuation when processing a transfer frame.
@@ -177,25 +200,27 @@ module Cosmos
     # header to determine its length and then ensures that it has enough data
     # to be complete based on its length.
     #
+    # @param virtual_channel [Int] Transfer frame virtual channel.
     # @param frame_data_field [String] Transfer frame data field.
     # @param first_header_pointer [Int] First header pointer value.
-    def handle_packet_continuation(frame_data_field, first_header_pointer)
-      if (@packet_queue.length > 0 &&
-          @packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
+    def handle_packet_continuation(virtual_channel, frame_data_field, first_header_pointer)
+      vc = @virtual_channels[virtual_channel]
+      if (vc.packet_queue.length > 0 &&
+          vc.packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
         # pending incomplete packet does not have header yet
-        rest_of_packet_header_length = @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH - @packet_queue[-1].length
-        @packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
+        rest_of_packet_header_length = @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH - vc.packet_queue[-1].length
+        vc.packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
 
-        space_packet_length = get_space_packet_length(@packet_queue[-1][@packet_prefix_length..-1])
+        space_packet_length = get_space_packet_length(vc.packet_queue[-1][@packet_prefix_length..-1])
         throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
 
-        @pending_incomplete_packet_bytes_left = space_packet_length - SPACE_PACKET_HEADER_LENGTH
+        vc.pending_incomplete_packet_bytes_left = space_packet_length - SPACE_PACKET_HEADER_LENGTH
       end
 
-      if (@pending_incomplete_packet_bytes_left >= frame_data_field.length)
+      if (vc.pending_incomplete_packet_bytes_left >= frame_data_field.length)
         # continuation of a packet
-        @packet_queue[-1] << frame_data_field
-        @pending_incomplete_packet_bytes_left -= frame_data_field.length
+        vc.packet_queue[-1] << frame_data_field
+        vc.pending_incomplete_packet_bytes_left -= frame_data_field.length
         return :STOP
       end
 
@@ -206,10 +231,10 @@ module Cosmos
         return :STOP
       end
 
-      if (@pending_incomplete_packet_bytes_left > 0)
-        rest_of_packet = frame_data_field.slice!(0, @pending_incomplete_packet_bytes_left)
-        @packet_queue[-1] << rest_of_packet
-        @pending_incomplete_packet_bytes_left = 0
+      if (vc.pending_incomplete_packet_bytes_left > 0)
+        rest_of_packet = frame_data_field.slice!(0, vc.pending_incomplete_packet_bytes_left)
+        vc.packet_queue[-1] << rest_of_packet
+        vc.pending_incomplete_packet_bytes_left = 0
       end
     end
 
@@ -224,19 +249,21 @@ module Cosmos
     # Handles both complete packets and unfinished packets which will be
     # finished in a later frame via handle_packet_continuation().
     #
+    # @param virtual_channel [Int] Transfer frame virtual channel.
     # @param frame_headers [String] Transfer frame headers, only used if prefixing packets.
     # @param frame_data_field [String] (Remaining) transfer frame data field.
-    def store_packets(frame_headers, frame_data_field)
+    def store_packets(virtual_channel, frame_headers, frame_data_field)
+      vc = @virtual_channels[virtual_channel]
       while (frame_data_field.length > 0) do
         if (@prefix_packets)
-          @packet_queue << frame_headers.clone
+          vc.packet_queue << frame_headers.clone
         else
-          @packet_queue << ""
+          vc.packet_queue << ""
         end
 
         if (frame_data_field.length < SPACE_PACKET_HEADER_LENGTH)
-          @packet_queue[-1] << frame_data_field
-          @pending_incomplete_packet_bytes_left = SPACE_PACKET_HEADER_LENGTH - frame_data_field.length
+          vc.packet_queue[-1] << frame_data_field
+          vc.pending_incomplete_packet_bytes_left = SPACE_PACKET_HEADER_LENGTH - frame_data_field.length
           return
         end
 
@@ -244,12 +271,12 @@ module Cosmos
         throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
 
         if (space_packet_length > frame_data_field.length)
-          @packet_queue[-1] << frame_data_field
-          @pending_incomplete_packet_bytes_left = space_packet_length - frame_data_field.length
+          vc.packet_queue[-1] << frame_data_field
+          vc.pending_incomplete_packet_bytes_left = space_packet_length - frame_data_field.length
           return
         end
 
-        @packet_queue[-1] << frame_data_field.slice!(0, space_packet_length)
+        vc.packet_queue[-1] << frame_data_field.slice!(0, space_packet_length)
       end
     end
 

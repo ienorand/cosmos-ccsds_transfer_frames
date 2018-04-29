@@ -43,24 +43,34 @@ module Cosmos
           [1115, 0, true, true],
           :READ)
         expect(@interface.read_protocols[0].instance_variable_get(:@data)).to eq ''
-        expect(@interface.read_protocols[0].instance_variable_get(:@pending_incomplete_packet_bytes_left)).to eq 0
+        expect(@interface.read_protocols[0].instance_variable_get(:@virtual_channels).length).to eq 8
+        @interface.read_protocols[0].instance_variable_get(:@virtual_channels).each do |vc|
+          expect(vc.packet_queue).to eq []
+          expect(vc.pending_incomplete_packet_bytes_left).to eq 0
+        end
         expect(@interface.read_protocols[0].instance_variable_get(:@frame_length)).to eq 1115
         expect(@interface.read_protocols[0].instance_variable_get(:@frame_headers_length)).to eq 6 + 0
         expect(@interface.read_protocols[0].instance_variable_get(:@frame_trailer_length)).to eq 4 + 2
         expect(@interface.read_protocols[0].instance_variable_get(:@prefix_packets)).to eq false
+        expect(@interface.read_protocols[0].instance_variable_get(:@include_idle_packets)).to eq false
       end
 
       it "initialises optional attributes" do
         @interface.add_protocol(
           CcsdsTransferFrameProtocol,
-          [1115, 7, false, false, true],
+          [1115, 7, false, false, true, true],
           :READ)
         expect(@interface.read_protocols[0].instance_variable_get(:@data)).to eq ''
-        expect(@interface.read_protocols[0].instance_variable_get(:@pending_incomplete_packet_bytes_left)).to eq 0
+        expect(@interface.read_protocols[0].instance_variable_get(:@virtual_channels).length).to eq 8
+        @interface.read_protocols[0].instance_variable_get(:@virtual_channels).each do |vc|
+          expect(vc.packet_queue).to eq []
+          expect(vc.pending_incomplete_packet_bytes_left).to eq 0
+        end
         expect(@interface.read_protocols[0].instance_variable_get(:@frame_length)).to eq 1115
         expect(@interface.read_protocols[0].instance_variable_get(:@frame_headers_length)).to eq 6 + 7
         expect(@interface.read_protocols[0].instance_variable_get(:@frame_trailer_length)).to eq 0 + 0
         expect(@interface.read_protocols[0].instance_variable_get(:@prefix_packets)).to eq true
+        expect(@interface.read_protocols[0].instance_variable_get(:@include_idle_packets)).to eq true
       end
     end
 
@@ -90,11 +100,34 @@ module Cosmos
           false], # does not have frame error control
           :READ)
         $buffer = "\x25\x76\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\x31\x11\x58\xC6"
-        $buffer += "\x26\x77\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
+        $buffer += "\x26\x76\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
         # should return the reassembled packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 7 + 7
         expect(packet.buffer).to eql "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+      end
+
+      it "Handles packets which fills two frames interleaved over two virtual channels" do
+        @interface.instance_variable_set(:@stream, TestStream.new)
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+          # Transfer frame length, 7 bytes data field.
+          6 + 2 + 7 + 4 + 0,
+          2, # secondary header length
+          true, # has operational control field
+          false], # does not have frame error control
+          :READ)
+        $buffer = "\x25\x00\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\x31\x11\x58\xC6"
+        $buffer += "\x26\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x57\xAC\xE7\xAC\x00\x07\xDB" + "\x31\x11\x58\xC6"
+        $buffer += "\x27\x00\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
+        $buffer += "\x28\x77\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDB\xDB\xDB\xDB\xDB\xDB\xDB" + "\x32\x12\x59\xC7"
+        # should return the reassembled packet from virtual channel 0
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 7 + 7
+        expect(packet.buffer).to eql "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+        # should then return the reassembled packet from virtual channel 3
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 7 + 7
+        expect(packet.buffer).to eql "\x57\xAC\xE7\xAC\x00\x07\xDB" + "\xDB\xDB\xDB\xDB\xDB\xDB\xDB"
       end
 
       it "Handles packets which fills three frames" do
@@ -106,9 +139,9 @@ module Cosmos
           true, # has operational control field
           false], # does not have frame error control
           :READ)
-        $buffer = "\x25\x76\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x0E\xDA" + "\x31\x11\x58\xC6"
+        $buffer = "\x25\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x0E\xDA" + "\x31\x11\x58\xC6"
         $buffer += "\x26\x77\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
-        $buffer += "\x27\x78\x15\x46\x87\xFF" + "\xF5\x3F" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x33\x13\x5A\xC8"
+        $buffer += "\x27\x77\x15\x46\x87\xFF" + "\xF5\x3F" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x33\x13\x5A\xC8"
         # should return the reassembled packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 7 + 7 + 7
@@ -149,13 +182,13 @@ module Cosmos
           false], # does not have frame error control
           :READ)
 
-        $buffer = "\x01\x02\x03\x04\x00\x00" + "\x05\x06\x07\x08\x00\x00\xDA" + "\x09"
+        $buffer = "\x02\x02\x03\x04\x00\x00" + "\x05\x06\x07\x08\x00\x00\xDA" + "\x09"
         # should return the first packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 7
         expect(packet.buffer).to eql "\x05\x06\x07\x08\x00\x00\xDA"
 
-        $buffer = "\x10\x11\x12\x13\x07\xFF" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
+        $buffer = "\x10\x02\x12\x13\x07\xFF" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
         # should return the reassembled second packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 9
@@ -173,7 +206,7 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x00\x00" + "\x05\x06\x07\x08\x00\x02\xDA\xDA"
-        $buffer += "\x10\x11\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
+        $buffer += "\x10\x02\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
         # should return the reassembled first packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 9
@@ -195,7 +228,7 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x07\xFF" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
-        $buffer += "\x10\x11\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
+        $buffer += "\x10\x02\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
         # Should return the packet whose start is known, with the second frame
         # headers as prefix.
         packet = @interface.read
@@ -369,12 +402,12 @@ module Cosmos
           false, # does not have frame error control
           true], # prefix packets
           :READ)
-        $buffer = "\x25\x76\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\x31\x11\x58\xC6"
+        $buffer = "\x25\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\x31\x11\x58\xC6"
         $buffer += "\x26\x77\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
         # should return the reassembled packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 6 + 2 + 7 + 7
-        expect(packet.buffer).to eql "\x25\x76\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+        expect(packet.buffer).to eql "\x25\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
       end
 
       it "Handles and prefixes packets which fills three frames" do
@@ -387,13 +420,37 @@ module Cosmos
           false, # does not have frame error control
           true], # prefix packets
           :READ)
-        $buffer = "\x25\x76\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x0E\xDA" + "\x31\x11\x58\xC6"
+        $buffer = "\x25\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x0E\xDA" + "\x31\x11\x58\xC6"
         $buffer += "\x26\x77\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
-        $buffer += "\x27\x78\x15\x46\x87\xFF" + "\xF5\x3F" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x33\x13\x5A\xC8"
+        $buffer += "\x27\x77\x15\x46\x87\xFF" + "\xF5\x3F" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x33\x13\x5A\xC8"
         # should return the reassembled packet
         packet = @interface.read
         expect(packet.buffer.length).to eql 6 + 2 + 7 + 7 + 7
-        expect(packet.buffer).to eql "\x25\x76\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x0E\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+        expect(packet.buffer).to eql "\x25\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x0E\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+      end
+
+      it "Handles and prefixes packets which fills two frames interleaved over two virtual channels" do
+        @interface.instance_variable_set(:@stream, TestStream.new)
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+          # Transfer frame length, 7 bytes data field.
+          6 + 2 + 7 + 4 + 0,
+          2, # secondary header length
+          true, # has operational control field
+          false, # does not have frame error control
+          true], # prefix packets
+          :READ)
+        $buffer = "\x25\x00\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\x31\x11\x58\xC6"
+        $buffer += "\x26\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x57\xAC\xE7\xAC\x00\x07\xDB" + "\x31\x11\x58\xC6"
+        $buffer += "\x27\x00\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" + "\x32\x12\x59\xC7"
+        $buffer += "\x28\x77\x14\x45\x87\xFF" + "\xF4\x3E" + "\xDB\xDB\xDB\xDB\xDB\xDB\xDB" + "\x32\x12\x59\xC7"
+        # should return the reassembled packet from virtual channel 0
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 6 + 2 + 7 + 7
+        expect(packet.buffer).to eql "\x25\x00\x13\x44\x80\x00" + "\xF3\x3D" + "\x59\xAC\xE9\xAC\x00\x07\xDA" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+        # should then return the reassembled packet from virtual channel 3
+        packet = @interface.read
+        expect(packet.buffer.length).to eql 6 + 2 + 7 + 7
+        expect(packet.buffer).to eql "\x26\x77\x13\x44\x80\x00" + "\xF3\x3D" + "\x57\xAC\xE7\xAC\x00\x07\xDB" + "\xDB\xDB\xDB\xDB\xDB\xDB\xDB"
       end
 
       it "Handles and prefixes multiple packets from one frame" do
@@ -438,7 +495,7 @@ module Cosmos
         expect(packet.buffer.length).to eql 6 + 7
         expect(packet.buffer).to eql "\x01\x02\x03\x04\x00\x00" + "\x05\x06\x07\x08\x00\x00\xDA"
 
-        $buffer = "\x10\x11\x12\x13\x07\xFF" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
+        $buffer = "\x10\x02\x12\x13\x07\xFF" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
         # should return the reassembled packet with the first frame headers as prefix
         packet = @interface.read
         expect(packet.buffer.length).to eql 6 + 9
@@ -457,7 +514,7 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x00\x00" + "\x05\x06\x07\x08\x00\x02\xDA\xDA"
-        $buffer += "\x10\x11\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
+        $buffer += "\x10\x02\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
         # should return the reassembled first packet with the first frame headers as prefix
         packet = @interface.read
         expect(packet.buffer.length).to eql 6 + 9
@@ -465,7 +522,7 @@ module Cosmos
         # then the second packet with the second frame headers as prefix
         packet = @interface.read
         expect(packet.buffer.length).to eql 6 + 7
-        expect(packet.buffer).to eql "\x10\x11\x12\x13\x00\x01" + "\x14\x15\x16\x17\x00\x00\xDA"
+        expect(packet.buffer).to eql "\x10\x02\x12\x13\x00\x01" + "\x14\x15\x16\x17\x00\x00\xDA"
       end
 
       it "Uses the first header pointer to sync to an initial packet start and adds the correct prefix" do
@@ -480,12 +537,12 @@ module Cosmos
           :READ)
 
         $buffer = "\x01\x02\x03\x04\x07\xFF" + "\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
-        $buffer += "\x10\x11\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
+        $buffer += "\x10\x02\x12\x13\x00\x01" + "\xDA\x14\x15\x16\x17\x00\x00\xDA"
         # Should return the packet whose start is known, with the second frame
         # headers as prefix.
         packet = @interface.read
         expect(packet.buffer.length).to eql 6 + 7
-        expect(packet.buffer).to eql "\x10\x11\x12\x13\x00\x01" + "\x14\x15\x16\x17\x00\x00\xDA"
+        expect(packet.buffer).to eql "\x10\x02\x12\x13\x00\x01" + "\x14\x15\x16\x17\x00\x00\xDA"
       end
 
       it "Asks for more data if not enough for a frame is received and prefixes correctly" do
