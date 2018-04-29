@@ -177,7 +177,8 @@ module Cosmos
     # header to determine its length and then ensures that it has enough data
     # to be complete based on its length.
     #
-    # @param frame [String] Transfer frame data.
+    # @param frame_data_field [String] Transfer frame data field.
+    # @param first_header_pointer [Int] First header pointer value.
     def handle_packet_continuation(frame_data_field, first_header_pointer)
       if (@packet_queue.length > 0 &&
           @packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
@@ -212,6 +213,19 @@ module Cosmos
       end
     end
 
+    # Extract all packets from the remaining frame data field, and store them
+    # in the packet queue.
+    #
+    # It is assumed that packet continuation data from any previously
+    # unfinished packets has been removed from the frame data field prior, and
+    # hence that the given remaining frame data field starts at a space packet
+    # header.
+    #
+    # Handles both complete packets and unfinished packets which will be
+    # finished in a later frame via handle_packet_continuation().
+    #
+    # @param frame_headers [String] Transfer frame headers, only used if prefixing packets.
+    # @param frame_data_field [String] (Remaining) transfer frame data field.
     def store_packets(frame_headers, frame_data_field)
       while (frame_data_field.length > 0) do
         if (@prefix_packets)
