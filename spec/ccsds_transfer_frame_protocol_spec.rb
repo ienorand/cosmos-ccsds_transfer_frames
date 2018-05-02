@@ -68,6 +68,24 @@ module Cosmos
     end
 
     describe "read" do
+      it "forwards empty data to next protocol if no whole packets are ready" do
+        @interface.add_protocol(CcsdsTransferFrameProtocol, [
+        # Transfer frame length, 7 bytes data field (minimum space packet length).
+          6 + 0 + 7 + 0 + 0,
+          0, # secondary header length
+          false, # does not have operational control field
+          false], # does not have frame error control
+          :READ)
+        # Second dummy protocol, since CcsdsTransferFrameProtocol should only
+        # forward empty data if it is not the last protocol in the chain.
+        @interface.add_protocol(Protocol, [], :READ)
+
+        # should return empty string
+        packet_data = @interface.read_protocols[0].read_data("")
+        expect(packet_data).to eql ""
+      end
+
+
       it "Handles packets which fills a frame" do
         @interface.add_protocol(CcsdsTransferFrameProtocol, [
           # Transfer frame length, 7 bytes data field (minimum space packet length).
