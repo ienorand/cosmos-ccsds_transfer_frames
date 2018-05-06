@@ -1,4 +1,4 @@
-# Cosmos::CcsdsTransferFrameProtocol
+# Cosmos::CcsdsTransferFrames
 
 This gem contains a CCSDS transfer frame protocol for use with the Ball Aerospace COSMOS application.
 
@@ -22,15 +22,21 @@ $ bundle
 
 ## Usage
 
-In order to use this protocol in your COSMOS target add it in the command and telemetry server configuration as an extra protocol in an interface definition, for example:
+In order to use this protocol in your COSMOS target first make sure to add the following to the `target.txt` file for your target:
+
+```
+REQUIRE cosmos/ccsds_transfer_frames
+```
+
+Then add the protocol in the command and telemetry server configuration in an interface definition as usual. The full explicit module namespace is necessary, for example:
 
 ```
 INTERFACE INTERFACE_NAME tcpip_client_interface.rb localhost 12345 12345 10.0 nil
-  PROTOCOL CcsdsTranferFrameProtocol 1115 0 true true
+  PROTOCOL Cosmos::CcsdsTransferFrames::CcsdsTranferFrameProtocol 1115 0 true true
   TARGET TARGET_NAME
 ```
 
-which would set up the protocol to expect transfer frames with:
+This would set up the protocol to expect transfer frames with:
 
 * A total size of 1115 bytes.
 * No secondary header.
@@ -39,7 +45,7 @@ which would set up the protocol to expect transfer frames with:
 * No prefixing of packets (default).
 * Discarding of idle packets (default).
 
-For detailed information about the available configuration parameters for the protocol, please consult the yard inline source code documentation in `lib/cosmos/interfaces/protocols/ccsds_transfer_frame_protocol.rb`
+For detailed information about the available configuration parameters for the protocol, please consult the yard inline source code documentation in `lib/cosmos/ccsds_transfer_frames/ccsds_transfer_frame_protocol.rb`
 
 ## Development
 

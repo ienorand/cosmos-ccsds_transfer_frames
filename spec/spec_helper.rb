@@ -1,6 +1,6 @@
 require "bundler/setup"
 require "cosmos"
-require "ccsds_transfer_frame_protocol"
+require "cosmos/ccsds_transfer_frames"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

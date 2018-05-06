@@ -1,10 +1,11 @@
 
 lib = File.expand_path("../lib", __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
+require "cosmos/ccsds_transfer_frames/version"
 
 Gem::Specification.new do |spec|
   spec.name          = "cosmos-ccsds_transfer_frames"
-  spec.version       = "0.1.0"
+  spec.version       = Cosmos::CcsdsTransferFrames::VERSION
   spec.authors       = ["Fredrik Persson", "Martin Erik Werner"]
   spec.email         = ["u.fredrik.persson@gmail.com", "martinerikwerner@gmail.com"]
 
