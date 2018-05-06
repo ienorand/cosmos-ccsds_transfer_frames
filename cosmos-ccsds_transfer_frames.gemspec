@@ -6,11 +6,16 @@ require "cosmos/ccsds_transfer_frames/version"
 Gem::Specification.new do |spec|
   spec.name          = "cosmos-ccsds_transfer_frames"
   spec.version       = Cosmos::CcsdsTransferFrames::VERSION
-  spec.authors       = ["Martin Erik Werner"]
-  spec.email         = ["martinerikwerner@gmail.com"]
+  spec.authors       = ["Fredrik Persson", "Martin Erik Werner"]
+  spec.email         = ["u.fredrik.persson@gmail.com", "martinerikwerner@gmail.com"]
 
-  spec.summary       = %q{TODO: Write a short summary, because RubyGems requires one.}
-  spec.description   = %q{TODO: Write a longer description or delete this line.}
+  spec.summary       = "CCSDS transfer frame protocol for use in COSMOS"
+  spec.description   = <<-EOF
+    A Ball Aerospace COSMOS 'tool' gem which provides a read-only protocol
+    for extracting CCSDS space packets from CCSDS transfer frames, optionally
+    prefixing each packet, with the transfer frame headers of the frame where
+    it started.
+  EOF
   spec.homepage      = "TODO: Put your gem's website or public repo URL here."
   spec.license       = "GPL-3.0"
 
