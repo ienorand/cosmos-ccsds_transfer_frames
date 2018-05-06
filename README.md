@@ -49,6 +49,8 @@ For detailed information about the available configuration parameters for the pr
 
 ## Development
 
+[![Build Status](https://travis-ci.org/ienorand/cosmos-ccsds_transfer_frames.svg?branch=master)](https://travis-ci.org/ienorand/cosmos-ccsds_transfer_frames)
+
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests.
 
 To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in the gemspec file, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
