@@ -76,4 +76,4 @@ A copy of the GPLv3.0 is provided in [LICENSE.txt](LICENSE.txt).
 
 ## Code of Conduct
 
-Everyone interacting in the Cosmos::CcsdsTransferFrameProtocol project’s codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/ienorand/cosmos-ccsds_transfer_frames/blob/master/CODE_OF_CONDUCT.md).
+Everyone interacting in the Cosmos::CcsdsTransferFrames project’s codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/ienorand/cosmos-ccsds_transfer_frames/blob/master/CODE_OF_CONDUCT.md).
