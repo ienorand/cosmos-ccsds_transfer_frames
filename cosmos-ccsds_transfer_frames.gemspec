@@ -6,8 +6,8 @@ require "cosmos/ccsds_transfer_frames/version"
 Gem::Specification.new do |spec|
   spec.name          = "cosmos-ccsds_transfer_frames"
   spec.version       = Cosmos::CcsdsTransferFrames::VERSION
-  spec.authors       = ["Fredrik Persson", "Martin Erik Werner"]
-  spec.email         = ["u.fredrik.persson@gmail.com", "martinerikwerner@gmail.com"]
+  spec.authors       = ["Martin Erik Werner"]
+  spec.email         = ["martinerikwerner@gmail.com"]
 
   spec.summary       = "CCSDS transfer frame protocol for use in COSMOS"
   spec.description   = <<-EOF
