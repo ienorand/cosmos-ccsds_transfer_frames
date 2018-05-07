@@ -2,7 +2,7 @@
 
 This gem contains a CCSDS transfer frame protocol for use with the Ball Aerospace COSMOS application.
 
-The protocol extracts CCSDS space packets from CCSDS transfer frames, optionally prefixing each packe with the transfer frame headers of the frame where it started.
+The protocol extracts CCSDS space packets from CCSDS transfer frames, optionally prefixing each packet with the transfer frame headers of the frame where it started.
 
 ## Installation
 
