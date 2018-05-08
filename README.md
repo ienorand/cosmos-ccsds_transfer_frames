@@ -32,7 +32,7 @@ Then add the protocol in the command and telemetry server configuration in an in
 
 ```
 INTERFACE INTERFACE_NAME tcpip_client_interface.rb localhost 12345 12345 10.0 nil
-  PROTOCOL Cosmos::CcsdsTransferFrames::CcsdsTranferFrameProtocol 1115 0 true true
+  PROTOCOL Cosmos::CcsdsTransferFrames::CcsdsTransferFrameProtocol 1115 0 true true
   TARGET TARGET_NAME
 ```
 
