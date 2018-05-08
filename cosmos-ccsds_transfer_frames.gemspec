@@ -11,10 +11,10 @@ Gem::Specification.new do |spec|
 
   spec.summary       = "CCSDS transfer frame protocol for use in COSMOS"
   spec.description   = <<-EOF
-    A Ball Aerospace COSMOS 'tool' gem which provides a read-only protocol
-    for extracting CCSDS space packets from CCSDS transfer frames, optionally
-    prefixing each packet, with the transfer frame headers of the frame where
-    it started.
+    A Ball Aerospace COSMOS extension gem which provides a read-only
+    protocol for extracting CCSDS space packets from CCSDS transfer frames,
+    optionally prefixing each packet with the transfer frame headers of the
+    frame where it started.
   EOF
   spec.homepage      = "https://github.com/ienorand/cosmos-ccsds_transfer_frames"
   spec.license       = "GPL-3.0"
