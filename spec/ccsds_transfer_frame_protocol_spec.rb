@@ -344,7 +344,7 @@ module Cosmos
             false], # does not have frame error control
             :READ)
 
-          # should ask for more data since packet is incomplete
+          # should return the first packet
           packet_data = @interface.read_protocols[0].read_data(
             "\x01\x02\x03\x04\x00\x00" +
             "\x05\x06\x07\x08\x00\x01\xDA\xDA")
