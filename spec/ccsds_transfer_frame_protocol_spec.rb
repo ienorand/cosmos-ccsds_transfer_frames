@@ -69,415 +69,610 @@ module Cosmos
       end
 
       describe "read" do
-        it "forwards empty data to next protocol if no whole packets are ready" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-          # Transfer frame length, 7 bytes data field (minimum space packet length).
-            6 + 0 + 7 + 0 + 0,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-          # Second dummy protocol, since CcsdsTransferFrameProtocol should only
-          # forward empty data if it is not the last protocol in the chain.
-          @interface.add_protocol(Protocol, [], :READ)
+        context "is setup for a minimal transfer frame" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 7 bytes data field (minimum space packet length).
+              6 + 0 + 7 + 0 + 0,
+              0, # secondary header length
+              false, # does not have operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should return empty string
-          packet_data = @interface.read_protocols[0].read_data("")
-          expect(packet_data).to eql ""
+          context "is not the last protocol in a chain" do
+            before do
+              # Second dummy protocol, since CcsdsTransferFrameProtocol should only
+              # forward empty data if it is not the last protocol in the chain.
+              @interface.add_protocol(Protocol, [], :READ)
+            end
+
+            context "no whole packets are ready" do
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns an empty string" do
+                  expect(@packet_data).to eql ""
+                end
+              end
+            end
+
+            context "a whole packet is ready" do
+              before do
+                @interface.read_protocols[0].instance_variable_get(:@virtual_channels)[0].packet_queue =
+                  ["\x01\x02\x03\x04\x00\x00\xDA"]
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the packet" do
+                  expect(@packet_data).to eql "\x01\x02\x03\x04\x00\x00\xDA"
+                end
+              end
+            end
+          end
+
+          context "is the last protocol in a chain" do
+            context "no whole packets are ready" do
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "asks for more data" do
+                  expect(@packet_data).to eql :STOP
+                end
+              end
+            end
+
+            context "a whole packet is ready" do
+              before do
+                @interface.read_protocols[0].instance_variable_get(:@virtual_channels)[0].packet_queue =
+                  ["\x01\x02\x03\x04\x00\x00\xDA"]
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the packet" do
+                  expect(@packet_data).to eql "\x01\x02\x03\x04\x00\x00\xDA"
+                end
+              end
+            end
+          end
         end
 
+        context "is setup for a minimal transfer frame including a secondary header and frame error control" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 7 bytes data field (minimum space packet length).
+              6 + 1 + 7 + 0 + 2,
+              1, # secondary header length
+              false, # does not have operational control field
+              true], # has frame error control
+              :READ)
+          end
 
-        it "Handles packets which fills a frame" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 7 bytes data field (minimum space packet length).
-            6 + 1 + 7 + 0 + 2,
-            1, # secondary header length
-            false, # does not have operational control field
-            true], # has frame error control
-            :READ)
-
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x02\x03\x02\x05\x08\x00" +
-            "\x07" +
-            "\x09\x02\x0B\x05\x00\x00\xDA" +
-            "\x0F\x02")
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x09\x02\x0B\x05\x00\x00\xDA"
+          context "receives a frame with a packet that fills the frame" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x02\x03\x02\x05\x08\x00" +
+                "\x07" +
+                "\x09\x02\x0B\x05\x00\x00\xDA" +
+                "\x0F\x02")
+            end
+            it "returns the packet" do
+              expect(@packet_data.length).to eql 7
+              expect(@packet_data).to eql "\x09\x02\x0B\x05\x00\x00\xDA"
+            end
+          end
         end
 
-        it "Handles packets which fills two frames" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 7 bytes data field.
-            6 + 2 + 7 + 4 + 0,
-            2, # secondary header length
-            true, # has operational control field
-            false], # does not have frame error control
-            :READ)
+        context "is setup for a tiny transfer frame including a secondary header and operational control field" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 7 bytes data field.
+              6 + 2 + 7 + 4 + 0,
+              2, # secondary header length
+              true, # has operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should ask for more data
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x25\x76\x13\x44\x80\x00" +
-            "\xF3\x3D" +
-            "\x59\xAC\xE9\xAC\x00\x07\xDA" +
-            "\x31\x11\x58\xC6")
-          expect(packet_data).to eql :STOP
+          context "receives a frame with a packet that is incomplete and fills two frames" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x25\x76\x13\x44\x80\x00" +
+                "\xF3\x3D" +
+                "\x59\xAC\xE9\xAC\x00\x07\xDA" +
+                "\x31\x11\x58\xC6")
+            end
 
-          # should then return the reassembled packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x26\x76\x14\x45\x87\xFF" +
-            "\xF4\x3E" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
-            "\x32\x12\x59\xC7")
-          expect(packet_data.length).to eql 7 + 7
-          expect(packet_data).to eql "\x59\xAC\xE9\xAC\x00\x07\xDA" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+            it "asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "recieves a frame which completes the packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x26\x76\x14\x45\x87\xFF" +
+                  "\xF4\x3E" +
+                  "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
+                  "\x32\x12\x59\xC7")
+              end
+
+              it "returns the reassembled packet" do
+                expect(@packet_data.length).to eql 7 + 7
+                expect(@packet_data).to eql "\x59\xAC\xE9\xAC\x00\x07\xDA" +
+                  "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+              end
+            end
+          end
+
+          context "receives a frame with a packet that is incomplete and fills three frames" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x25\x77\x13\x44\x80\x00" +
+                "\xF3\x3D" +
+                "\x59\xAC\xE9\xAC\x00\x0E\xDA" +
+                "\x31\x11\x58\xC6")
+            end
+
+            it "asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "receives a frame with packet continuation which does not complete the packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x26\x77\x14\x45\x87\xFF" +
+                  "\xF4\x3E" +
+                  "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
+                  "\x32\x12\x59\xC7")
+              end
+
+              it "asks for more data" do
+                expect(@packet_data).to eql :STOP
+              end
+
+              context "recieves a frame which completes the packet" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data(
+                    "\x27\x77\x15\x46\x87\xFF" +
+                    "\xF5\x3F" +
+                    "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
+                    "\x33\x13\x5A\xC8")
+                end
+
+                it "returns the reassembled packet" do
+                  expect(@packet_data.length).to eql 7 + 7 + 7
+                  expect(@packet_data).to eql "\x59\xAC\xE9\xAC\x00\x0E\xDA" +
+                    "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
+                    "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+                end
+              end
+            end
+          end
         end
 
-        it "Handles packets which fills three frames" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 7 bytes data field.
-            6 + 2 + 7 + 4 + 0,
-            2, # secondary header length
-            true, # has operational control field
-            false], # does not have frame error control
-            :READ)
+        context "is setup for a small transfer frame including a secondary header" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 27 bytes data field.
+              6 + 3 + 27 + 0 + 0,
+              3, # secondary header length
+              false, # does not have operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should ask for more data
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x25\x77\x13\x44\x80\x00" +
-            "\xF3\x3D" +
-            "\x59\xAC\xE9\xAC\x00\x0E\xDA" +
-            "\x31\x11\x58\xC6")
-          expect(packet_data).to eql :STOP
+          context "receives a frame with three packets" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07" +
+                "\x08\x09\x10\x11\x00\x01\xDA\xDA" +
+                "\x12\x13\x14\x15\x00\x03\xDA\xDA\xDA\xDA" +
+                "\x16\x17\x18\x19\x00\x02\xDA\xDA\xDA")
+            end
 
-          # should then ask for more data again
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x26\x77\x14\x45\x87\xFF" +
-            "\xF4\x3E" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
-            "\x32\x12\x59\xC7")
-          expect(packet_data).to eql :STOP
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 8
+              expect(@packet_data).to eql "\x08\x09\x10\x11\x00\x01\xDA\xDA"
+            end
 
-          # should then return the reassembled packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x27\x77\x15\x46\x87\xFF" +
-            "\xF5\x3F" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
-            "\x33\x13\x5A\xC8")
-          expect(packet_data.length).to eql 7 + 7 + 7
-          expect(packet_data).to eql "\x59\xAC\xE9\xAC\x00\x0E\xDA" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+            context "receives an empty string" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data("")
+              end
+
+              it "returns the second packet" do
+                expect(@packet_data.length).to eql 10
+                expect(@packet_data).to eql "\x12\x13\x14\x15\x00\x03\xDA\xDA\xDA\xDA"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the third packet" do
+                  expect(@packet_data.length).to eql 9
+                  expect(@packet_data).to eql "\x16\x17\x18\x19\x00\x02\xDA\xDA\xDA"
+                end
+              end
+            end
+          end
         end
 
-        it "Extracts multiple packets from one frame" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 27 bytes data field.
-            6 + 3 + 27 + 0 + 0,
-            3, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
+        context "is setup for a tiny transfer frame with one byte extra in the data field" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 8 bytes data field.
+              6 + 8,
+              0, # secondary header length
+              false, # does not have operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should return the first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07" +
-            "\x08\x09\x10\x11\x00\x01\xDA\xDA" +
-            "\x12\x13\x14\x15\x00\x03\xDA\xDA\xDA\xDA" +
-            "\x16\x17\x18\x19\x00\x02\xDA\xDA\xDA")
-          expect(packet_data.length).to eql 8
-          expect(packet_data).to eql "\x08\x09\x10\x11\x00\x01\xDA\xDA"
+          context "receives a frame with a complete packet and one byte from the next packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x02\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x00\xDA" +
+                "\x09")
+            end
 
-          # should then return the second packet
-          packet_data = @interface.read_protocols[0].read_data("")
-          expect(packet_data.length).to eql 10
-          expect(packet_data).to eql "\x12\x13\x14\x15\x00\x03\xDA\xDA\xDA\xDA"
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 7
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x00\xDA"
+            end
 
-          # should then return the third packet
-          packet_data = @interface.read_protocols[0].read_data("")
-          expect(packet_data.length).to eql 9
-          expect(packet_data).to eql "\x16\x17\x18\x19\x00\x02\xDA\xDA\xDA"
+            context "receives a frame which completes the packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x12\x13\x07\xFF" +
+                  "\x14\x15\x16\x00\x02\xDA\xDA\xDA")
+              end
+
+              it "returns the reassembled second packet" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x09" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
+              end
+            end
+          end
+
+          context "receives a frame with an incomplete packet with one byte missing" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x02\xDA\xDA")
+            end
+
+            it "asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "receives a frame which completes the packet and contains another complete packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x12\x13\x00\x01" +
+                  "\xDA" +
+                  "\x14\x15\x16\x17\x00\x00\xDA")
+              end
+
+              it "returns the reassembled first packet" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x02\xDA\xDA\xDA"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the second packet" do
+                  expect(@packet_data.length).to eql 7
+                  expect(@packet_data).to eql "\x14\x15\x16\x17\x00\x00\xDA"
+                end
+              end
+            end
+          end
+
+          context "receives a frame with no packet start" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x07\xFF" +
+                "\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA")
+            end
+
+            it "asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "receives a frame with a packet start at second byte" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x12\x13\x00\x01" +
+                  "\xDA\x14\x15\x16\x17\x00\x00\xDA")
+              end
+
+              it "returns the packet" do
+                expect(@packet_data.length).to eql 7
+                expect(@packet_data).to eql "\x14\x15\x16\x17\x00\x00\xDA"
+              end
+            end
+          end
+
+          context "receives a frame with an incomplete packet with three bytes missing" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x04\xDA\xDA")
+            end
+
+            it "asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "receives a frame which does not provide any continuation and a second whole packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x11\x12\x00\x00" +
+                  "\x13\x14\x15\x16\x00\x01\xDA\xDA")
+              end
+
+              it "returns the first packet cut short" do
+                expect(@packet_data.length).to eql 8
+                expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x04\xDA\xDA"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("");
+                end
+
+                it "returns the second packet" do
+                  expect(@packet_data.length).to eql 8
+                  expect(@packet_data).to eql "\x13\x14\x15\x16\x00\x01\xDA\xDA"
+                end
+              end
+            end
+
+            context "receives a frame which provides insufficient continuation and a second whole packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x11\x12\x00\x01" +
+                  "\xDA\x13\x14\x15\x16\x00\x00\xDA")
+              end
+
+              it "returns the first packet cut short" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x04\xDA\xDA\xDA"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("");
+                end
+
+                it "returns the second packet" do
+                  expect(@packet_data.length).to eql 7
+                  expect(@packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+                end
+              end
+            end
+          end
+
+          context "receives a frame with a complete packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x01\xDA\xDA")
+            end
+
+            it "returns the packet" do
+              expect(@packet_data.length).to eql 8
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+            end
+
+            context "receives a frame with one byte continuation and a second whole packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x11\x12\x00\x01" +
+                  "\xFF\x13\x14\x15\x16\x00\x00\xDA")
+              end
+
+              it "discards the continuation and returns the second packet" do
+                expect(@packet_data.length).to eql 7
+                expect(@packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+              end
+            end
+          end
+
+          context "receives a frame with a complete packet and one byte from an incomplete idle packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x00\xDA" +
+                "\x3F")
+            end
+
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 7
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x00\xDA"
+            end
+
+            context "recieves a frame which completes the idle packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x01\x02\x03\x04\x07\xFF" +
+                  "\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
+              end
+
+              it "skips the idle packet and asks for more data" do
+                expect(@packet_data).to eql :STOP
+              end
+            end
+          end
+
+          context "receives a frame with an idle packet followed by one byte from an incomplete packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x3F\xFF\x05\x06\x00\x00\x5A" +
+                "\x07")
+            end
+
+            it "skips the idle packet and asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "receives a frame which completes the packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x01\x02\x03\x04\x07\xFF" +
+                  "\x08\x09\x0A\x00\x02\xDA\xDA\xDA")
+              end
+
+              it "returns the reassembled second packet" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x07\x08\x09\x0A\x00\x02\xDA\xDA\xDA"
+              end
+            end
+          end
         end
 
-        it "Handles packets which starts at the end of a frame and spans two frames" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
+        context "is setup for a tiny transfer frame with two bytes extra in the data field" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 9 bytes data field.
+              6 + 9,
+              0, # secondary header length
+              false, # does not have operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should return the first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x02\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x00\xDA" +
-            "\x09")
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x00\xDA"
+          context "receives a frame with an incomplete packet with one byte missing" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA")
+            end
 
-          # should then return the reassembled second packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x12\x13\x07\xFF" +
-            "\x14\x15\x16\x00\x02\xDA\xDA\xDA")
-          expect(packet_data.length).to eql 9
-          expect(packet_data).to eql "\x09" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
+            it "asks for more data" do
+              expect(@packet_data).to eql :STOP
+            end
+
+            context "receives a frame which provides too much continuation and a second whole packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x11\x12\x00\x02" +
+                  "\xDA\xFF\x13\x14\x15\x16\x00\x00\xDA")
+                expect(@packet_data.length).to eql 10
+                expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA\xDA"
+              end
+
+              it "returns the reassembled first packet with no extra continuation" do
+                expect(@packet_data.length).to eql 10
+                expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA\xDA"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("");
+                end
+
+                it "returns the second packet (and discards the extra continuation)" do
+                  expect(@packet_data.length).to eql 7
+                  expect(@packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+                end
+              end
+            end
+          end
         end
 
-        it "Handles packets which spans two frames and ends before the end of a frame" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
+        context "is setup for a small transfer frame with 17 bytes data field and ignoring of idle packets" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 17 bytes data field.
+              6 + 17,
+              0, # secondary header length
+              false, # does not have operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should ask for more data
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x02\xDA\xDA")
-          expect(packet_data).to eql :STOP
+          context "receives a frame with a whole packet followed by a whole idle packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
+                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
+            end
 
-          # should then return the reassembled first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x12\x13\x00\x01" +
-            "\xDA" +
-            "\x14\x15\x16\x17\x00\x00\xDA")
-          expect(packet_data.length).to eql 9
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x02\xDA\xDA\xDA"
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 8
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+            end
 
-          # should then return the second packet
-          packet_data = @interface.read_protocols[0].read_data("")
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x14\x15\x16\x17\x00\x00\xDA"
+            context "receives an empty string" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data("")
+              end
+
+              it "skips the idle packet and asks for more data" do
+                expect(@packet_data).to eql :STOP
+              end
+            end
+          end
         end
 
-        it "Uses the first header pointer to sync to an initial packet start" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
+        context "is setup for a small transfer frame with 27 bytes data field and ignoring of idle packets" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 27 bytes data field.
+              6 + 27,
+              0, # secondary header length
+              false, # does not have operational control field
+              false], # does not have frame error control
+              :READ)
+          end
 
-          # should ask for more data when no packet start is found
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x07\xFF" +
-            "\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA")
-          expect(packet_data).to eql :STOP
+          context "receives a frame with a whole packet followed by a whole idle packet followed by a whole packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
+                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
+                "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA")
+            end
 
-          # should then return the packet whose start is known
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x12\x13\x00\x01" +
-            "\xDA\x14\x15\x16\x17\x00\x00\xDA")
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x14\x15\x16\x17\x00\x00\xDA"
-        end
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 8
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+            end
 
-        it "Gives first header pointer precedence over packet length, with packet length past first header pointer at start of frame." do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
+            context "recieves an empty string" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data("")
+              end
 
-          # should ask for more data since packet is incomplete
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x04\xDA\xDA")
-          expect(packet_data).to eql :STOP
-
-          # Should then return the "completed" first packet, cut off by first
-          # header pointer precedence.
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x11\x12\x00\x00" +
-            "\x13\x14\x15\x16\x00\x01\xDA\xDA")
-          expect(packet_data.length).to eql 8
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x04\xDA\xDA"
-
-          # should then return the second packet
-          packet_data = @interface.read_protocols[0].read_data("");
-          expect(packet_data.length).to eql 8
-          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x01\xDA\xDA"
-        end
-
-        it "Gives first header pointer precedence over packet length, with packet length past first header pointer inside frame." do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should ask for more data since packet is incomplete
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x04\xDA\xDA")
-          expect(packet_data).to eql :STOP
-
-          # Should then return the "completed" first packet, cut off by first
-          # header pointer precedence.
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x11\x12\x00\x01" +
-            "\xDA\x13\x14\x15\x16\x00\x00\xDA")
-          expect(packet_data.length).to eql 9
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x04\xDA\xDA\xDA"
-
-          # should then return the second packet
-          packet_data = @interface.read_protocols[0].read_data("");
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
-        end
-
-        it "Gives first header pointer precedence over packet length, with packet completed and first header pointer inside frame." do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should return the first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x01\xDA\xDA")
-          expect(packet_data.length).to eql 8
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
-
-          # should then discard the leftover and return the second packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x11\x12\x00\x01" +
-            "\xFF\x13\x14\x15\x16\x00\x00\xDA")
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
-        end
-
-        it "Gives first header pointer precedence over packet length, with packet length not reaching first header pointer inside frame." do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 9 bytes data field.
-            6 + 9,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should ask for more data since packet is incomplete
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA")
-          expect(packet_data).to eql :STOP
-
-          # should then return the completed first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x10\x02\x11\x12\x00\x02" +
-            "\xDA\xFF\x13\x14\x15\x16\x00\x00\xDA")
-          expect(packet_data.length).to eql 10
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA\xDA"
-
-          # should then discard the leftover and return the second packet
-          packet_data = @interface.read_protocols[0].read_data("");
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
-        end
-
-        it "Discards idle packets" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 17 bytes data field.
-            6 + 17,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should return the first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
-            "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
-          expect(packet_data.length).to eql 8
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
-
-          # should then skip the idle packet and ask for more data
-          expect(@interface.read_protocols[0].read_data("")).to eql :STOP
-        end
-
-        it "Discards idle packets in between normal packets" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 27 bytes data field.
-            6 + 27,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should return the first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
-            "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
-            "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA")
-          expect(packet_data.length).to eql 8
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
-
-          # should then skip the idle packet and return the last packet
-          packet_data = @interface.read_protocols[0].read_data("")
-          expect(packet_data.length).to eql 10
-          expect(packet_data).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
-        end
-
-        it "Discards idle packets which spans multiple frames" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should return the first packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x05\x06\x07\x08\x00\x00\xDA" +
-            "\x3F")
-          expect(packet_data.length).to eql 7
-          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x00\xDA"
-
-          # should then skip the idle packet and ask for more data
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x07\xFF" +
-            "\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
-          expect(packet_data).to eql :STOP
-        end
-
-        it "Handles and idle packet followed by a packet that spans two frames" do
-          @interface.add_protocol(CcsdsTransferFrameProtocol, [
-            # Transfer frame length, 8 bytes data field.
-            6 + 8,
-            0, # secondary header length
-            false, # does not have operational control field
-            false], # does not have frame error control
-            :READ)
-
-          # should not return the idle packet and ask for more data
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x00\x00" +
-            "\x3F\xFF\x05\x06\x00\x00\x5A" +
-            "\x07")
-          expect(packet_data).to eql :STOP
-
-          # should then return the finished packet
-          packet_data = @interface.read_protocols[0].read_data(
-            "\x01\x02\x03\x04\x07\xFF" +
-            "\x08\x09\x0A\x00\x02\xDA\xDA\xDA")
-          expect(packet_data.length).to eql 9
-          expect(packet_data).to eql "\x07\x08\x09\x0A\x00\x02\xDA\xDA\xDA"
+              it "skips the idle packet and returns the third packet" do
+                expect(@packet_data.length).to eql 10
+                expect(@packet_data).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
+              end
+            end
+          end
         end
 
         it "Reads until a whole frame is received" do
