@@ -191,7 +191,7 @@ module Cosmos
           frame_data_field.replace(frame_data_field[first_header_pointer..-1])
         end
 
-        frame_headers = frame[0, @frame_headers_length].clone
+        frame_headers = frame[0, @frame_headers_length]
         store_packets(virtual_channel, frame_headers, frame_data_field)
       end
 
