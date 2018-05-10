@@ -182,14 +182,9 @@ module Cosmos
 
         frame_data_field = frame[@frame_headers_length, @frame_data_field_length]
 
-        status = handle_packet_continuation(virtual_channel, frame_data_field, first_header_pointer)
-        return if (Symbol === status && status == :STOP)
+        handle_packet_continuation(virtual_channel, frame_data_field, first_header_pointer)
 
-        if (frame_data_field.length == @frame_data_field_length)
-          # No continuation packet was completed, and a packet starts in this
-          # frame. Utilise the first header pointer to re-sync to a packet start.
-          frame_data_field.replace(frame_data_field[first_header_pointer..-1])
-        end
+        return if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
 
         frame_headers = frame[0, @frame_headers_length]
         store_packets(virtual_channel, frame_headers, frame_data_field)
@@ -197,19 +192,33 @@ module Cosmos
 
       # Handle packet continuation when processing a transfer frame.
       #
-      # Ensures that any incomplete packet first has enough data for the packet
-      # header to determine its length and then ensures that it has enough data
-      # to be complete based on its length.
+      # First ensures that any incomplete packet has enough data for the packet
+      # header to determine its length and then tries to complete it.
+      #
+      # If the first header pointer indicates that a packet starts in this
+      # frame, the frame_data_field parameter will be modified by removing
+      # everything before the first header pointer.
       #
       # @param virtual_channel [Int] Transfer frame virtual channel.
       # @param frame_data_field [String] Transfer frame data field.
       # @param first_header_pointer [Int] First header pointer value.
       def handle_packet_continuation(virtual_channel, frame_data_field, first_header_pointer)
         vc = @virtual_channels[virtual_channel]
-        if (vc.packet_queue.length > 0 &&
-            vc.packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
-          # pending incomplete packet does not have header yet
-          rest_of_packet_header_length = @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH - vc.packet_queue[-1].length
+
+        if (vc.packet_queue.length == 0 ||
+            vc.pending_incomplete_packet_bytes_left == 0)
+          # no packet in queue to be continued
+
+          return if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
+
+          frame_data_field.replace(frame_data_field[first_header_pointer..-1])
+          return
+        end
+
+        if (vc.packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
+          # Pending incomplete packet does not yet heave header, complete
+          # header and get length before processing further.
+          rest_of_packet_header_length = vc.pending_incomplete_packet_bytes_left
           vc.packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
 
           space_packet_length = get_space_packet_length(vc.packet_queue[-1][@packet_prefix_length..-1])
@@ -218,25 +227,46 @@ module Cosmos
           vc.pending_incomplete_packet_bytes_left = space_packet_length - SPACE_PACKET_HEADER_LENGTH
         end
 
-        if (vc.pending_incomplete_packet_bytes_left >= frame_data_field.length)
-          # continuation of a packet
+        if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
+          # packet continues past this frame or ends exactly at end of this
+          # frame according to first header pointer
+
+          if (vc.pending_incomplete_packet_bytes_left < frame_data_field.length)
+            # Packet length is inconsistent with first header pointer, since it
+            # indicates that the packet ends before the end of this frame.
+            #
+            # Complete the packet based on the packet length and ignore the
+            # rest of the data in the frame (will use first header pointer to
+            # re-sync with start of next packet in a later frame).
+            vc.packet_queue[-1] << frame_data_field[0, vc.pending_incomplete_packet_bytes_left]
+            vc.pending_incomplete_packet_bytes_left = 0
+            return
+          end
+
+          # First header pointer and packet length are consistent, append whole frame.
           vc.packet_queue[-1] << frame_data_field
           vc.pending_incomplete_packet_bytes_left -= frame_data_field.length
-          return :STOP
+          return
         end
 
-        if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
-          # This was not a continuation of a packet (or it was a continuation of
-          # an ignored idle packet), wait for another frame to find a packet
-          # start.
-          return :STOP
+        # packet ends before the end of this frame according to first header
+        # pointer
+        packet_continuation = frame_data_field.slice!(0, first_header_pointer)
+        if (vc.pending_incomplete_packet_bytes_left < packet_continuation.length)
+          # Packet length is inconsistent with first header pointer, since it
+          # indicates that the packet ends before the first header pointer.
+          #
+          # Complete the packet based on the packet length and ignore the data
+          # between the packet end and the first header pointer.
+          packet_continuation.replace(packet_continuation[0, vc.pending_incomplete_packet_bytes_left])
         end
 
-        if (vc.pending_incomplete_packet_bytes_left > 0)
-          rest_of_packet = frame_data_field.slice!(0, vc.pending_incomplete_packet_bytes_left)
-          vc.packet_queue[-1] << rest_of_packet
-          vc.pending_incomplete_packet_bytes_left = 0
-        end
+        # If the packet length is too long compared to the first header
+        # pointer, the first header pointer takes precedence and the packet is
+        # cut short.
+
+        vc.packet_queue[-1] << packet_continuation
+        vc.pending_incomplete_packet_bytes_left = 0
       end
 
       # Extract all packets from the remaining frame data field, and store them

@@ -277,6 +277,116 @@ module Cosmos
           expect(packet_data).to eql "\x14\x15\x16\x17\x00\x00\xDA"
         end
 
+        it "Gives first header pointer precedence over packet length, with packet length past first header pointer at start of frame." do
+          @interface.add_protocol(CcsdsTransferFrameProtocol, [
+            # Transfer frame length, 8 bytes data field.
+            6 + 8,
+            0, # secondary header length
+            false, # does not have operational control field
+            false], # does not have frame error control
+            :READ)
+
+          # should ask for more data since packet is incomplete
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x01\x02\x03\x04\x00\x00" +
+            "\x05\x06\x07\x08\x00\x04\xDA\xDA")
+          expect(packet_data).to eql :STOP
+
+          # Should then return the "completed" first packet, cut off by first
+          # header pointer precedence.
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x10\x02\x11\x12\x00\x00" +
+            "\x13\x14\x15\x16\x00\x01\xDA\xDA")
+          expect(packet_data.length).to eql 8
+          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x04\xDA\xDA"
+
+          # should then return the second packet
+          packet_data = @interface.read_protocols[0].read_data("");
+          expect(packet_data.length).to eql 8
+          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x01\xDA\xDA"
+        end
+
+        it "Gives first header pointer precedence over packet length, with packet length past first header pointer inside frame." do
+          @interface.add_protocol(CcsdsTransferFrameProtocol, [
+            # Transfer frame length, 8 bytes data field.
+            6 + 8,
+            0, # secondary header length
+            false, # does not have operational control field
+            false], # does not have frame error control
+            :READ)
+
+          # should ask for more data since packet is incomplete
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x01\x02\x03\x04\x00\x00" +
+            "\x05\x06\x07\x08\x00\x04\xDA\xDA")
+          expect(packet_data).to eql :STOP
+
+          # Should then return the "completed" first packet, cut off by first
+          # header pointer precedence.
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x10\x02\x11\x12\x00\x01" +
+            "\xDA\x13\x14\x15\x16\x00\x00\xDA")
+          expect(packet_data.length).to eql 9
+          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x04\xDA\xDA\xDA"
+
+          # should then return the second packet
+          packet_data = @interface.read_protocols[0].read_data("");
+          expect(packet_data.length).to eql 7
+          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+        end
+
+        it "Gives first header pointer precedence over packet length, with packet completed and first header pointer inside frame." do
+          @interface.add_protocol(CcsdsTransferFrameProtocol, [
+            # Transfer frame length, 8 bytes data field.
+            6 + 8,
+            0, # secondary header length
+            false, # does not have operational control field
+            false], # does not have frame error control
+            :READ)
+
+          # should ask for more data since packet is incomplete
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x01\x02\x03\x04\x00\x00" +
+            "\x05\x06\x07\x08\x00\x01\xDA\xDA")
+          expect(packet_data.length).to eql 8
+          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+
+          # should then discard the leftover and return the second packet
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x10\x02\x11\x12\x00\x01" +
+            "\xFF\x13\x14\x15\x16\x00\x00\xDA")
+          expect(packet_data.length).to eql 7
+          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+        end
+
+        it "Gives first header pointer precedence over packet length, with packet length not reaching first header pointer inside frame." do
+          @interface.add_protocol(CcsdsTransferFrameProtocol, [
+            # Transfer frame length, 9 bytes data field.
+            6 + 9,
+            0, # secondary header length
+            false, # does not have operational control field
+            false], # does not have frame error control
+            :READ)
+
+          # should ask for more data since packet is incomplete
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x01\x02\x03\x04\x00\x00" +
+            "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA")
+          expect(packet_data).to eql :STOP
+
+          # should then return the completed first packet
+          packet_data = @interface.read_protocols[0].read_data(
+            "\x10\x02\x11\x12\x00\x02" +
+            "\xDA\xFF\x13\x14\x15\x16\x00\x00\xDA")
+          expect(packet_data.length).to eql 10
+          expect(packet_data).to eql "\x05\x06\x07\x08\x00\x03\xDA\xDA\xDA\xDA"
+
+          # should then discard the leftover and return the second packet
+          packet_data = @interface.read_protocols[0].read_data("");
+          expect(packet_data.length).to eql 7
+          expect(packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+        end
+
         it "Discards idle packets" do
           @interface.add_protocol(CcsdsTransferFrameProtocol, [
             # Transfer frame length, 17 bytes data field.
