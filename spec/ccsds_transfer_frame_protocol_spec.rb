@@ -269,10 +269,10 @@ module Cosmos
             "\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA")
           expect(packet_data).to eql :STOP
 
+          # should then return the packet whose start is known
           packet_data = @interface.read_protocols[0].read_data(
             "\x10\x02\x12\x13\x00\x01" +
             "\xDA\x14\x15\x16\x17\x00\x00\xDA")
-          # should then return the packet whose start is known
           expect(packet_data.length).to eql 7
           expect(packet_data).to eql "\x14\x15\x16\x17\x00\x00\xDA"
         end
@@ -488,7 +488,7 @@ module Cosmos
             "\x31\x11\x58\xC6")
           expect(packet_data).to eql :STOP
 
-          #should then ask for more data again
+          # should then ask for more data again
           packet_data = @interface.read_protocols[0].read_data(
             "\x26\x77\x14\x45\x87\xFF" +
             "\xF4\x3E" +
@@ -606,9 +606,9 @@ module Cosmos
           expect(packet_data).to eql "\x01\x02\x03\x04\x00\x00" +
             "\x05\x06\x07\x08\x00\x02\xDA\xDA\xDA"
 
-          packet_data = @interface.read_protocols[0].read_data("")
           # should then return the second packet with the second frame headers as
           # prefix
+          packet_data = @interface.read_protocols[0].read_data("")
           expect(packet_data.length).to eql 6 + 7
           expect(packet_data).to eql "\x10\x02\x12\x13\x00\x01" +
             "\x14\x15\x16\x17\x00\x00\xDA"
