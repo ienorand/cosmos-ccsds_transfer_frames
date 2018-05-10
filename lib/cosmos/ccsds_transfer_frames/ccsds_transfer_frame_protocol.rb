@@ -132,7 +132,7 @@ module Cosmos
       #
       # @return [String] Packet data, if the queues contained at least one
       #   complete packet.
-      # @return [Symbol] :STOP, if the queues does not contain any complete
+      # @return [Symbol] :STOP, if the queues do not contain any complete
       #   packets.
       def get_packet
         @virtual_channels.each do |vc|
