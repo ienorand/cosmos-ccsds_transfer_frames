@@ -47,7 +47,7 @@ This would set up the protocol to expect transfer frames with:
 * No prefixing of packets (default).
 * Discarding of idle packets (default).
 
-For detailed information about the available configuration parameters for the protocol, please consult the yard inline source code documentation in `lib/cosmos/ccsds_transfer_frames/ccsds_transfer_frame_protocol.rb`
+For detailed information about the available configuration parameters for the protocol, please consult the yard inline source code documentation in [ccsds_transfer_frame_protocol.rb](lib/cosmos/ccsds_transfer_frames/ccsds_transfer_frame_protocol.rb) or the generated documentation for the currently published gem at https://www.rubydoc.info/gems/cosmos-ccsds_transfer_frames/Cosmos/CcsdsTransferFrames/CcsdsTransferFrameProtocol
 
 ## Development
 
