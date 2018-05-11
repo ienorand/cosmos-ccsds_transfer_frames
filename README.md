@@ -1,12 +1,14 @@
 # Cosmos::CcsdsTransferFrames
 
-This gem contains a CCSDS transfer frame protocol for use with the Ball Aerospace COSMOS application.
+This gem contains a [CCSDS](https://public.ccsds.org/default.aspx) transfer frame protocol for use with the [Ball Aerospace COSMOS application](http://cosmosrb.com).
 
 The protocol extracts CCSDS space packets from CCSDS transfer frames, optionally prefixing each packet with the transfer frame headers of the frame where it started.
 
+See [CCSDS 132.0-B-2 - TM Space Data Link Protocol. Blue Book.](https://public.ccsds.org/Pubs/132x0b2.pdf) and [CCSDS 133.0-B-1 - Space Packet Protocol. Blue Book.](https://public.ccsds.org/Pubs/133x0b1c2.pdf) for detailed information.
+
 ## Installation
 
-This gem is intended to be installed as a 'gem based target/tool' (see http://cosmosrb.com/docs/gemtargets/) in COSMOS and made available for use as a normal protocol in a target command and telemetry server configuration. Note that the protocol provided in this gem is neither a target nor a tool in the COSMOS sense.
+This gem is intended to be installed as a [gem based target/tool](http://cosmosrb.com/docs/gemtargets/) in COSMOS and made available for use as a normal protocol in a target command and telemetry server configuration. Note that the protocol provided in this gem is neither a target nor a tool in the COSMOS sense.
 
 In order to make this protocol available for use in your COSMOS targets, add this line to the Gemfile of your COSMOS project:
 
