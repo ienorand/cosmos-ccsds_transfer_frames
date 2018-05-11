@@ -29,42 +29,64 @@ module Cosmos
       end
 
       describe "initialize" do
-        it "initialises attributes" do
-          @interface.add_protocol(
-            CcsdsTransferFrameProtocol,
-            [1115, 0, true, true],
-            :READ)
 
-          expect(@interface.read_protocols[0].instance_variable_get(:@data)).to eq ''
-          expect(@interface.read_protocols[0].instance_variable_get(:@virtual_channels).length).to eq 8
-          @interface.read_protocols[0].instance_variable_get(:@virtual_channels).each do |vc|
-            expect(vc.packet_queue).to eq []
-            expect(vc.pending_incomplete_packet_bytes_left).to eq 0
+        shared_examples "a protocol with an empty data buffer" do
+          it "clears the data buffer" do
+            expect(@interface.read_protocols[0].instance_variable_get(:@data)).to eq ''
           end
-          expect(@interface.read_protocols[0].instance_variable_get(:@frame_length)).to eq 1115
-          expect(@interface.read_protocols[0].instance_variable_get(:@frame_headers_length)).to eq 6 + 0
-          expect(@interface.read_protocols[0].instance_variable_get(:@frame_trailer_length)).to eq 4 + 2
-          expect(@interface.read_protocols[0].instance_variable_get(:@prefix_packets)).to eq false
-          expect(@interface.read_protocols[0].instance_variable_get(:@include_idle_packets)).to eq false
         end
 
-        it "initialises optional attributes" do
-          @interface.add_protocol(
-            CcsdsTransferFrameProtocol,
-            [1115, 7, false, false, true, true],
-            :READ)
-
-          expect(@interface.read_protocols[0].instance_variable_get(:@data)).to eq ''
-          expect(@interface.read_protocols[0].instance_variable_get(:@virtual_channels).length).to eq 8
-          @interface.read_protocols[0].instance_variable_get(:@virtual_channels).each do |vc|
-            expect(vc.packet_queue).to eq []
-            expect(vc.pending_incomplete_packet_bytes_left).to eq 0
+        shared_examples "a protocol with initialised empty virtual channels" do
+          it "initialises the correct amount of virtual channels" do
+            expect(@interface.read_protocols[0].instance_variable_get(:@virtual_channels).length).to eq 8
           end
-          expect(@interface.read_protocols[0].instance_variable_get(:@frame_length)).to eq 1115
-          expect(@interface.read_protocols[0].instance_variable_get(:@frame_headers_length)).to eq 6 + 7
-          expect(@interface.read_protocols[0].instance_variable_get(:@frame_trailer_length)).to eq 0 + 0
-          expect(@interface.read_protocols[0].instance_variable_get(:@prefix_packets)).to eq true
-          expect(@interface.read_protocols[0].instance_variable_get(:@include_idle_packets)).to eq true
+
+          it "resets the data of each virtual channel" do
+            @interface.read_protocols[0].instance_variable_get(:@virtual_channels).each do |vc|
+              expect(vc.packet_queue).to eq []
+              expect(vc.pending_incomplete_packet_bytes_left).to eq 0
+            end
+          end
+        end
+
+        context "is setup for a transfer frame of size 1115 with operational control field and frame errors control" do
+          before do
+            @interface.add_protocol(
+              CcsdsTransferFrameProtocol,
+              [1115, 0, true, true],
+              :READ)
+          end
+
+          it_behaves_like "a protocol with an empty data buffer"
+          it_behaves_like "a protocol with initialised empty virtual channels"
+
+          it "initialises instance variables by parameters" do
+            expect(@interface.read_protocols[0].instance_variable_get(:@frame_length)).to eq 1115
+            expect(@interface.read_protocols[0].instance_variable_get(:@frame_headers_length)).to eq 6 + 0
+            expect(@interface.read_protocols[0].instance_variable_get(:@frame_trailer_length)).to eq 4 + 2
+            expect(@interface.read_protocols[0].instance_variable_get(:@prefix_packets)).to eq false
+            expect(@interface.read_protocols[0].instance_variable_get(:@include_idle_packets)).to eq false
+          end
+        end
+
+        context "is setup for a transfer frame of size 1115 with a secondary header, prefixing of packets, and inclusion of idle packets" do
+          before do
+            @interface.add_protocol(
+              CcsdsTransferFrameProtocol,
+              [1115, 7, false, false, true, true],
+              :READ)
+          end
+
+          it_behaves_like "a protocol with an empty data buffer"
+          it_behaves_like "a protocol with initialised empty virtual channels"
+
+          it "initialises instance variables by parameters" do
+            expect(@interface.read_protocols[0].instance_variable_get(:@frame_length)).to eq 1115
+            expect(@interface.read_protocols[0].instance_variable_get(:@frame_headers_length)).to eq 6 + 7
+            expect(@interface.read_protocols[0].instance_variable_get(:@frame_trailer_length)).to eq 0 + 0
+            expect(@interface.read_protocols[0].instance_variable_get(:@prefix_packets)).to eq true
+            expect(@interface.read_protocols[0].instance_variable_get(:@include_idle_packets)).to eq true
+          end
         end
       end
 
