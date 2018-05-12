@@ -216,9 +216,16 @@ module Cosmos
         end
 
         if (vc.packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
-          # Pending incomplete packet does not yet heave header, complete
-          # header and get length before processing further.
+          # Pending incomplete packet does not yet heave header, try to
+          # complete header and get length before processing further.
           rest_of_packet_header_length = vc.pending_incomplete_packet_bytes_left
+          if (rest_of_packet_header_length > first_header_pointer)
+            # Not enough continuation to complete packet header, first header
+            # pointer takes precedence and packet is cut short.
+            vc.packet_queue[-1] << frame_data_field.slice!(0, first_header_pointer)
+            vc.pending_incomplete_packet_bytes_left = 0
+            return
+          end
           vc.packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
 
           space_packet_length = get_space_packet_length(vc.packet_queue[-1][@packet_prefix_length..-1])

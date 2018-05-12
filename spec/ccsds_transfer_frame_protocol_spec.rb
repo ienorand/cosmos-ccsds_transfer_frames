@@ -370,6 +370,54 @@ module Cosmos
                 expect(@packet_data).to eql "\x09" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
               end
             end
+
+            context "receives a frame which does not provide any continuation and a second whole packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x11\x12\x00\x00" +
+                  "\x13\x14\x15\x16\x00\x01\xDA\xDA")
+              end
+
+              it "returns the continued packet cut short" do
+                expect(@packet_data.length).to eql 1
+                expect(@packet_data).to eql "\x09"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("");
+                end
+
+                it "returns the second packet" do
+                  expect(@packet_data.length).to eql 8
+                  expect(@packet_data).to eql "\x13\x14\x15\x16\x00\x01\xDA\xDA"
+                end
+              end
+            end
+
+            context "recieves a frame with insufficient continuation followed by a whole packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x11\x12\x00\x01" +
+                  "\x10\x13\x14\x15\x16\x00\x00\xDA")
+              end
+
+              it "returns the continued packet cut short" do
+                expect(@packet_data.length).to eql 2
+                expect(@packet_data).to eql "\x09\x10"
+              end
+
+              context "receives an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("");
+                end
+
+                it "returns the second packet" do
+                  expect(@packet_data.length).to eql 7
+                  expect(@packet_data).to eql "\x13\x14\x15\x16\x00\x00\xDA"
+                end
+              end
+            end
           end
 
           context "receives a frame with an incomplete packet with one byte missing" do
