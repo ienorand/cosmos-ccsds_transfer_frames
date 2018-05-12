@@ -671,7 +671,7 @@ module Cosmos
           end
         end
 
-        context "is setup for a small transfer frame with 17 bytes data field and ignoring of idle packets" do
+        context "is setup for a small transfer frame with 17 bytes data field" do
           before do
             @interface.add_protocol(CcsdsTransferFrameProtocol, [
               # Transfer frame length, 17 bytes data field.
@@ -707,7 +707,7 @@ module Cosmos
           end
         end
 
-        context "is setup for a small transfer frame with 27 bytes data field and ignoring of idle packets" do
+        context "is setup for a small transfer frame with 27 bytes data field" do
           before do
             @interface.add_protocol(CcsdsTransferFrameProtocol, [
               # Transfer frame length, 27 bytes data field.
@@ -740,6 +740,95 @@ module Cosmos
               it "skips the idle packet and returns the third packet" do
                 expect(@packet_data.length).to eql 10
                 expect(@packet_data).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
+              end
+            end
+          end
+        end
+
+        context "is setup for a small transfer frame with 17 bytes data field and inclusion of idle packets" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 17 bytes data field.
+              6 + 17,
+              0, # secondary header length
+              false, # does not have operational control field
+              false, # does not have frame error control
+              false, # no prefixing of packets (default)
+              true], # include idle packets
+              :READ)
+          end
+
+          context "receives a frame with a whole packet followed by a whole idle packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
+                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
+            end
+
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 8
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+            end
+
+            context "receives an empty string" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data("")
+              end
+
+              it "returns the second idle packet" do
+                expect(@packet_data).to eql "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+              end
+            end
+          end
+        end
+
+        context "is setup for a small transfer frame with 27 bytes data field and inclusion of idle packets" do
+          before do
+            @interface.add_protocol(CcsdsTransferFrameProtocol, [
+              # Transfer frame length, 27 bytes data field.
+              6 + 27,
+              0, # secondary header length
+              false, # does not have operational control field
+              false, # does not have frame error control
+              false, # no prefixing of packets (default)
+              true], # include idle packets
+              :READ)
+          end
+
+          context "receives a frame with a whole packet followed by a whole idle packet followed by a whole packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x01\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
+                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
+                "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA")
+            end
+
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 8
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x01\xDA\xDA"
+            end
+
+            context "recieves an empty string" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data("")
+              end
+
+              it "returns the second idle packet packet" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+              end
+
+              context "recieves an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the third packet" do
+                  expect(@packet_data.length).to eql 10
+                  expect(@packet_data).to eql "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA"
+                end
               end
             end
           end
