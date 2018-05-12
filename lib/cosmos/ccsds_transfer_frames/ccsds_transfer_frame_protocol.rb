@@ -215,18 +215,25 @@ module Cosmos
           return
         end
 
+        packet_continuation = nil
+        if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
+          packet_continuation = frame_data_field
+        else
+          packet_continuation = frame_data_field.slice!(0, first_header_pointer)
+        end
+
         if (vc.packet_queue[-1].length < @packet_prefix_length + SPACE_PACKET_HEADER_LENGTH)
           # Pending incomplete packet does not yet heave header, try to
           # complete header and get length before processing further.
           rest_of_packet_header_length = vc.pending_incomplete_packet_bytes_left
-          if (rest_of_packet_header_length > first_header_pointer)
+          if (rest_of_packet_header_length > packet_continuation.length)
             # Not enough continuation to complete packet header, first header
             # pointer takes precedence and packet is cut short.
-            vc.packet_queue[-1] << frame_data_field.slice!(0, first_header_pointer)
+            vc.packet_queue[-1] << packet_continuation
             vc.pending_incomplete_packet_bytes_left = 0
             return
           end
-          vc.packet_queue[-1] << frame_data_field.slice!(0, rest_of_packet_header_length)
+          vc.packet_queue[-1] << packet_continuation.slice!(0, rest_of_packet_header_length)
 
           space_packet_length = get_space_packet_length(vc.packet_queue[-1][@packet_prefix_length..-1])
           throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
@@ -238,27 +245,27 @@ module Cosmos
           # packet continues past this frame or ends exactly at end of this
           # frame according to first header pointer
 
-          if (vc.pending_incomplete_packet_bytes_left < frame_data_field.length)
+          if (vc.pending_incomplete_packet_bytes_left < packet_continuation.length)
             # Packet length is inconsistent with first header pointer, since it
             # indicates that the packet ends before the end of this frame.
             #
             # Complete the packet based on the packet length and ignore the
             # rest of the data in the frame (will use first header pointer to
             # re-sync with start of next packet in a later frame).
-            vc.packet_queue[-1] << frame_data_field[0, vc.pending_incomplete_packet_bytes_left]
+            vc.packet_queue[-1] << packet_continuation[0, vc.pending_incomplete_packet_bytes_left]
             vc.pending_incomplete_packet_bytes_left = 0
             return
           end
 
           # First header pointer and packet length are consistent, append whole frame.
-          vc.packet_queue[-1] << frame_data_field
+          vc.packet_queue[-1] << packet_continuation
           vc.pending_incomplete_packet_bytes_left -= frame_data_field.length
           return
         end
 
         # packet ends before the end of this frame according to first header
         # pointer
-        packet_continuation = frame_data_field.slice!(0, first_header_pointer)
+
         if (vc.pending_incomplete_packet_bytes_left < packet_continuation.length)
           # Packet length is inconsistent with first header pointer, since it
           # indicates that the packet ends before the first header pointer.

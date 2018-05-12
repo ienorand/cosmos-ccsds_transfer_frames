@@ -705,6 +705,84 @@ module Cosmos
               end
             end
           end
+
+          context "receives a frame with a complete packet and one byte from the next packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x02\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x09\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA" +
+                "\x09")
+            end
+
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 16
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x09\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+            end
+
+            context "receives a frame which completes the packet followed by a third packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x12\x13\x00\x08" +
+                  "\x14\x15\x16\x00\x02\xDA\xDA\xDA" +
+                  "\x17\x18\x19\x20\x00\x02\xDA\xDA\xDA")
+              end
+
+              it "returns the reassembled second packet" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x09" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
+              end
+
+              context "recieves an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the third packet" do
+                  expect(@packet_data.length).to eql 9
+                  expect(@packet_data).to eql "\x17\x18\x19\x20\x00\x02\xDA\xDA\xDA"
+                end
+              end
+            end
+          end
+
+          context "receives a frame with a complete packet and five bytes from the next packet" do
+            before do
+              @packet_data = @interface.read_protocols[0].read_data(
+                "\x02\x02\x03\x04\x00\x00" +
+                "\x05\x06\x07\x08\x00\x05\xDA\xDA\xDA\xDA\xDA\xDA" +
+                "\x09\x14\x15\x16\x00")
+            end
+
+            it "returns the first packet" do
+              expect(@packet_data.length).to eql 12
+              expect(@packet_data).to eql "\x05\x06\x07\x08\x00\x05\xDA\xDA\xDA\xDA\xDA\xDA"
+            end
+
+            context "receives a frame which completes the packet followed by a third packet" do
+              before do
+                @packet_data = @interface.read_protocols[0].read_data(
+                  "\x10\x02\x12\x13\x00\x04" +
+                  "\x02\xDA\xDA\xDA" +
+                  "\x17\x18\x19\x20\x00\x06\xDA\xDA\xDA\xDA\xDA\xDA\xDA")
+              end
+
+              it "returns the reassembled second packet" do
+                expect(@packet_data.length).to eql 9
+                expect(@packet_data).to eql "\x09" + "\x14\x15\x16\x00\x02\xDA\xDA\xDA"
+              end
+
+              context "recieves an empty string" do
+                before do
+                  @packet_data = @interface.read_protocols[0].read_data("")
+                end
+
+                it "returns the third packet" do
+                  expect(@packet_data.length).to eql 13
+                  expect(@packet_data).to eql "\x17\x18\x19\x20\x00\x06\xDA\xDA\xDA\xDA\xDA\xDA\xDA"
+                end
+              end
+            end
+          end
         end
 
         context "is setup for a small transfer frame with 27 bytes data field" do
