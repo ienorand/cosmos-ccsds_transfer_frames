@@ -141,9 +141,15 @@ module Cosmos
                vc.pending_incomplete_packet_bytes_left == 0))
             packet_data = vc.packet_queue.shift
 
-            return packet_data if @include_idle_packets
+            return packet_data if (@include_idle_packets ||
+                                   packet_data.length < SPACE_PACKET_HEADER_LENGTH)
 
-            apid = get_space_packet_apid(packet_data[@packet_prefix_length, SPACE_PACKET_HEADER_LENGTH])
+            apid = BinaryAccessor.read(
+              @packet_prefix_length * 8 + SPACE_PACKET_APID_BIT_OFFSET,
+              SPACE_PACKET_APID_BITS,
+              :UINT,
+              packet_data,
+              :BIG_ENDIAN)
             return packet_data unless (apid == IDLE_PACKET_APID)
           end
         end
@@ -234,10 +240,14 @@ module Cosmos
           end
           vc.packet_queue[-1] << packet_continuation.slice!(0, rest_of_packet_header_length)
 
-          space_packet_length = get_space_packet_length(vc.packet_queue[-1][@packet_prefix_length..-1])
-          throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
-
-          vc.pending_incomplete_packet_bytes_left = space_packet_length - SPACE_PACKET_HEADER_LENGTH
+          # actual length in ccsds space packet is stored value plus one
+          space_packet_data_field_length = BinaryAccessor.read(
+            @packet_prefix_length * 8 + SPACE_PACKET_LENGTH_BIT_OFFSET,
+            SPACE_PACKET_LENGTH_BITS,
+            :UINT,
+            vc.packet_queue[-1],
+            :BIG_ENDIAN) + 1
+          vc.pending_incomplete_packet_bytes_left = space_packet_data_field_length
         end
 
         if (first_header_pointer == NO_PACKET_START_FIRST_HEADER_POINTER)
@@ -311,8 +321,14 @@ module Cosmos
             return
           end
 
-          space_packet_length = get_space_packet_length(frame_data_field)
-          throw "failed to get space packet length" if Symbol === space_packet_length && space_packet_length == :STOP
+          # actual length in ccsds space packet is stored value plus one
+          space_packet_data_field_length = BinaryAccessor.read(
+            SPACE_PACKET_LENGTH_BIT_OFFSET,
+            SPACE_PACKET_LENGTH_BITS,
+            :UINT,
+            frame_data_field,
+            :BIG_ENDIAN) + 1
+          space_packet_length = SPACE_PACKET_HEADER_LENGTH + space_packet_data_field_length
 
           if (space_packet_length > frame_data_field.length)
             vc.packet_queue[-1] << frame_data_field
@@ -322,37 +338,6 @@ module Cosmos
 
           vc.packet_queue[-1] << frame_data_field.slice!(0, space_packet_length)
         end
-      end
-
-      def get_space_packet_length(space_packet)
-        # signal more data needed if we do not have enough to determine the
-        # length of the space packet
-        return :STOP if (space_packet.length < SPACE_PACKET_HEADER_LENGTH)
-
-        # actual length in ccsds space packet is stored value plus one
-        space_packet_data_field_length = BinaryAccessor.read(
-          SPACE_PACKET_LENGTH_BIT_OFFSET,
-          SPACE_PACKET_LENGTH_BITS,
-          :UINT,
-          space_packet,
-          :BIG_ENDIAN) + 1
-        space_packet_length = SPACE_PACKET_HEADER_LENGTH + space_packet_data_field_length
-        return space_packet_length
-      end
-
-      def get_space_packet_apid(space_packet)
-        # signal more data needed if we do not have enough of the header to
-        # determine the apid of the space packet
-        return :STOP if (space_packet.length < (SPACE_PACKET_APID_BIT_OFFSET + SPACE_PACKET_APID_BITS) / 8)
-
-        # actual length in ccsds space packet is stored value plus one
-        space_packet_apid = BinaryAccessor.read(
-          SPACE_PACKET_APID_BIT_OFFSET,
-          SPACE_PACKET_APID_BITS,
-          :UINT,
-          space_packet,
-          :BIG_ENDIAN)
-        return space_packet_apid
       end
     end
   end
