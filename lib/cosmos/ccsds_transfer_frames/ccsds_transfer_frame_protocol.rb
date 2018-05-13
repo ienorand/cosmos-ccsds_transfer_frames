@@ -29,9 +29,8 @@ module Cosmos
     # Only read is supported.
     class CcsdsTransferFrameProtocol < Protocol
       FRAME_PRIMARY_HEADER_LENGTH = 6
-      FIRST_HEADER_POINTER_OFFSET = 4
-      # last 11 bits
-      FIRST_HEADER_POINTER_MASK = [0b00000111, 0b11111111]
+      FIRST_HEADER_POINTER_BIT_OFFSET = FRAME_PRIMARY_HEADER_LENGTH * 8 - 11
+      FIRST_HEADER_POINTER_BITS = 11
       IDLE_FRAME_FIRST_HEADER_POINTER = 0b11111111110
       NO_PACKET_START_FIRST_HEADER_POINTER = 0b11111111111
       FRAME_VIRTUAL_CHANNEL_BIT_OFFSET = 12
@@ -164,9 +163,12 @@ module Cosmos
       #
       # @param frame [String] Transfer frame data.
       def process_frame(frame)
-        first_header_pointer =
-          ((frame.bytes[FIRST_HEADER_POINTER_OFFSET] & FIRST_HEADER_POINTER_MASK[0]) << 8) |
-          (frame.bytes[FIRST_HEADER_POINTER_OFFSET + 1] & FIRST_HEADER_POINTER_MASK[1])
+        first_header_pointer = BinaryAccessor.read(
+          FIRST_HEADER_POINTER_BIT_OFFSET,
+          FIRST_HEADER_POINTER_BITS,
+          :UINT,
+          frame,
+          :BIG_ENDIAN)
 
         return if (first_header_pointer == IDLE_FRAME_FIRST_HEADER_POINTER)
 
