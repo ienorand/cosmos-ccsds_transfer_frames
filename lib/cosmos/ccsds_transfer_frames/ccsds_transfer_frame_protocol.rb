@@ -136,14 +136,11 @@ module Cosmos
       #   packets.
       def get_packet
         @virtual_channels.each do |vc|
-          loop do
-            # Skip if there's only a single incomplete packet in the queue.
-            break if (vc.packet_queue.length == 1 &&
-                      vc.pending_incomplete_packet_bytes_left > 0)
-
+          # avoid extracting incomplete packets
+          while (vc.packet_queue.length >= 2 ||
+              (vc.packet_queue.length == 1 &&
+               vc.pending_incomplete_packet_bytes_left == 0))
             packet_data = vc.packet_queue.shift
-
-            break if packet_data.nil?
 
             return packet_data if @include_idle_packets
 
