@@ -309,14 +309,12 @@ module Cosmos
       def store_packets(virtual_channel, frame_headers, frame_data_field)
         vc = @virtual_channels[virtual_channel]
         while (frame_data_field.length > 0) do
-          if (@prefix_packets)
-            vc.packet_queue << frame_headers.clone
-          else
-            vc.packet_queue << ""
-          end
-
           if (frame_data_field.length < SPACE_PACKET_HEADER_LENGTH)
-            vc.packet_queue[-1] << frame_data_field
+            if (@prefix_packets)
+              vc.packet_queue << (frame_headers.clone << frame_data_field)
+            else
+              vc.packet_queue << frame_data_field
+            end
             vc.pending_incomplete_packet_bytes_left = SPACE_PACKET_HEADER_LENGTH - frame_data_field.length
             return
           end
@@ -331,12 +329,20 @@ module Cosmos
           space_packet_length = SPACE_PACKET_HEADER_LENGTH + space_packet_data_field_length
 
           if (space_packet_length > frame_data_field.length)
-            vc.packet_queue[-1] << frame_data_field
+            if (@prefix_packets)
+              vc.packet_queue << (frame_headers.clone << frame_data_field)
+            else
+              vc.packet_queue << frame_data_field
+            end
             vc.pending_incomplete_packet_bytes_left = space_packet_length - frame_data_field.length
             return
           end
 
-          vc.packet_queue[-1] << frame_data_field.slice!(0, space_packet_length)
+          if (@prefix_packets)
+            vc.packet_queue << (frame_headers.clone << frame_data_field.slice!(0, space_packet_length))
+          else
+            vc.packet_queue << frame_data_field.slice!(0, space_packet_length)
+          end
         end
       end
     end
