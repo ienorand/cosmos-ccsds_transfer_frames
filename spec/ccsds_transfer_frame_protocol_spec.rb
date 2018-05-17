@@ -573,7 +573,7 @@ module Cosmos
               @packet_data = @interface.read_protocols[0].read_data(
                 "\x01\x02\x03\x04\x00\x00" +
                 "\x05\x06\x07\x08\x00\x00\xDA" +
-                "\x3F")
+                "\x07")
             end
 
             it "returns the first packet" do
@@ -598,7 +598,7 @@ module Cosmos
             before do
               @packet_data = @interface.read_protocols[0].read_data(
                 "\x01\x02\x03\x04\x00\x00" +
-                "\x3F\xFF\x05\x06\x00\x00\x5A" +
+                "\x07\xFF\x05\x06\x00\x00\x5A" +
                 "\x07")
             end
 
@@ -687,7 +687,7 @@ module Cosmos
               @packet_data = @interface.read_protocols[0].read_data(
                 "\x01\x02\x03\x04\x00\x00" +
                 "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
-                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
+                "\x07\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
             end
 
             it "returns the first packet" do
@@ -801,7 +801,7 @@ module Cosmos
               @packet_data = @interface.read_protocols[0].read_data(
                 "\x01\x02\x03\x04\x00\x00" +
                 "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
-                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
+                "\x07\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
                 "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA")
             end
 
@@ -841,7 +841,7 @@ module Cosmos
               @packet_data = @interface.read_protocols[0].read_data(
                 "\x01\x02\x03\x04\x00\x00" +
                 "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
-                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
+                "\x07\xFF\x09\x0A\x00\x02\x5A\x5A\x5A")
             end
 
             it "returns the first packet" do
@@ -855,7 +855,7 @@ module Cosmos
               end
 
               it "returns the second idle packet" do
-                expect(@packet_data).to eql "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+                expect(@packet_data).to eql "\x07\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
               end
             end
           end
@@ -879,7 +879,7 @@ module Cosmos
               @packet_data = @interface.read_protocols[0].read_data(
                 "\x01\x02\x03\x04\x00\x00" +
                 "\x05\x06\x07\x08\x00\x01\xDA\xDA" +
-                "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
+                "\x07\xFF\x09\x0A\x00\x02\x5A\x5A\x5A" +
                 "\x0B\x0C\x0D\x0E\x00\x03\xDA\xDA\xDA\xDA")
             end
 
@@ -895,7 +895,7 @@ module Cosmos
 
               it "returns the second idle packet" do
                 expect(@packet_data.length).to eql 9
-                expect(@packet_data).to eql "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
+                expect(@packet_data).to eql "\x07\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
               end
 
               context "recieves an empty string" do

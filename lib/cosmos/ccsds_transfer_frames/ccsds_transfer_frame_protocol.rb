@@ -41,9 +41,9 @@ module Cosmos
       SPACE_PACKET_HEADER_LENGTH = 6
       SPACE_PACKET_LENGTH_BIT_OFFSET = 4 * 8
       SPACE_PACKET_LENGTH_BITS = 2 * 8
-      SPACE_PACKET_APID_BITS = 14
+      SPACE_PACKET_APID_BITS = 11
       SPACE_PACKET_APID_BIT_OFFSET = 2 * 8 - SPACE_PACKET_APID_BITS
-      IDLE_PACKET_APID = 0b11111111111111
+      IDLE_PACKET_APID = 0b11111111111
 
       # @param transfer_frame_length [Integer] Length of transfer frame in bytes
       # @param transfer_frame_secondary_header_length [Integer] Length of
