@@ -893,7 +893,7 @@ module Cosmos
                 @packet_data = @interface.read_protocols[0].read_data("")
               end
 
-              it "returns the second idle packet packet" do
+              it "returns the second idle packet" do
                 expect(@packet_data.length).to eql 9
                 expect(@packet_data).to eql "\x3F\xFF\x09\x0A\x00\x02\x5A\x5A\x5A"
               end
