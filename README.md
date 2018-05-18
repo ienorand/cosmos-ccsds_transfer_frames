@@ -30,7 +30,9 @@ In order to use this protocol in your COSMOS target first make sure to add the f
 REQUIRE cosmos/ccsds_transfer_frames
 ```
 
-Then add the protocol in the command and telemetry server configuration in an interface definition as usual. The full explicit module namespace is necessary, for example:
+Then add the protocol in the command and telemetry server configuration in an interface definition as usual. The full explicit module namespace `Cosmos::CcsdsTransferFrames::CcsdsTransferFrameProtocol` is necessary.
+
+For example:
 
 ```
 INTERFACE INTERFACE_NAME tcpip_client_interface.rb localhost 12345 12345 10.0 nil
@@ -38,14 +40,37 @@ INTERFACE INTERFACE_NAME tcpip_client_interface.rb localhost 12345 12345 10.0 ni
   TARGET TARGET_NAME
 ```
 
-This would set up the protocol to expect transfer frames with:
+would set up the protocol to expect transfer frames with:
 
 * A total size of 1115 bytes.
 * No secondary header.
 * Operational control field.
 * Frame error control field.
+
+and to perform:
+
 * No prefixing of packets (default).
 * Discarding of idle packets (default).
+
+Another example:
+
+```
+INTERFACE INTERFACE_NAME tcpip_client_interface.rb localhost 12345 12345 10.0 nil
+  PROTOCOL READ Cosmos::CcsdsTransferFrames::CcsdsTransferFrameProtocol 1115 64 false false true true
+  TARGET TARGET_NAME
+```
+
+would set up the protocol to expect transfer frames with:
+
+* A total size of 1115 bytes.
+* A secondary header with a size of 64 bytes.
+* No operational control field.
+* No frame error control field.
+
+and to perform:
+
+* Prefixing of packets.
+* No discarding of idle packets.
 
 For detailed information about the available configuration parameters for the protocol, please consult the yard inline source code documentation in [ccsds_transfer_frame_protocol.rb](lib/cosmos/ccsds_transfer_frames/ccsds_transfer_frame_protocol.rb) or the generated documentation for the currently published gem at https://www.rubydoc.info/gems/cosmos-ccsds_transfer_frames/Cosmos/CcsdsTransferFrames/CcsdsTransferFrameProtocol
 
