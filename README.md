@@ -74,6 +74,18 @@ and to perform:
 
 For detailed information about the available configuration parameters for the protocol, please consult the yard inline source code documentation in [ccsds_transfer_frame_protocol.rb](lib/cosmos/ccsds_transfer_frames/ccsds_transfer_frame_protocol.rb) or the generated documentation for the currently published gem at https://www.rubydoc.info/gems/cosmos-ccsds_transfer_frames/Cosmos/CcsdsTransferFrames/CcsdsTransferFrameProtocol
 
+### Packet prefixing
+
+Packet prefixing is a non-standard feature which prefixes each packet with the primary and secondary transfer frame headers from the frame in which the first byte of the packet was seen.
+
+For example, if a set of 4 frames containing 4 packets as illustrated below is received:
+
+![Frames before packet extraction and prefixing.](img/frames_before_packet_extraction_and_prefixing.svg)
+
+the resulting prefixed packets would be:
+
+![Prefixed packets after extraction and prefixing.](img/prefixed_packets_after_extraction_and_prefixing.svg)
+
 ## Development
 
 [![Build Status](https://travis-ci.org/ienorand/cosmos-ccsds_transfer_frames.svg?branch=master)](https://travis-ci.org/ienorand/cosmos-ccsds_transfer_frames)
